@@ -77,7 +77,10 @@ var rootCmd = &cobra.Command{
 	Short: "Manage your boxctl.io Firecracker microVMs from the command line",
 	Long: `boxctl talks to the boxctl-vms control plane behind boxctl.io to boot,
 list, connect to, and destroy your Firecracker microVMs ("boxes").`,
-	Example: `  # Save your personal access token (create one at ` + dashboardURL + `)
+	Example: `  # Browse your boxes in the terminal UI (the same as boxctl tui)
+  boxctl
+
+  # Save your personal access token (create one at ` + dashboardURL + `)
   boxctl login
 
   # List your running boxes (-a for paused ones too)
@@ -113,6 +116,12 @@ list, connect to, and destroy your Firecracker microVMs ("boxes").`,
 		// (scripts, CI, a box with the token in its environment).
 		if token := strings.TrimSpace(os.Getenv(tokenEnv)); token != "" {
 			cfg.Token = token
+		}
+
+		// Bare `boxctl`: runBareRoot shows the help when there's no
+		// token, so a fresh install isn't met with "not logged in".
+		if cmd.Parent() == nil {
+			return nil
 		}
 
 		// Check the whole command path, not just the leaf: `completion
