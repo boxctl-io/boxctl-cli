@@ -165,6 +165,9 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   child process through `tea.ExecProcess` -- in-process `runSSH` would
   leave its uncancellable stdin reader behind to eat the next keypress
   -- with `--api-url` passed on and its stderr captured for the flash.
+  Bare `boxctl` is the tui too (`runBareRoot`, as onctl does): on a
+  terminal with a token; otherwise the help, so a pipe or a fresh
+  install sees what it always did.
   `tui_test.go` drives the model with messages and keys against an
   `httptest` server (`tuiFlashFor` is a variable so the flash timers it
   runs don't wait). The plain, pre-k9s version is tagged `tui-plain`.

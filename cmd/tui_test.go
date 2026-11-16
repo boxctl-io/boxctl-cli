@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -690,5 +691,22 @@ func TestParseRepoPage(t *testing.T) {
 	}
 	if _, err := parseRepoPage([]byte(`{"message":"Bad credentials"}`)); err == nil {
 		t.Error("an error page parsed")
+	}
+}
+
+// Bare `boxctl` off a terminal (as under go test) prints the help and
+// doesn't demand a login.
+func TestBareRootHelpOffTerminal(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(tokenEnv, "")
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetArgs([]string{})
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetArgs(nil) })
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("bare boxctl: %v", err)
+	}
+	if !strings.Contains(out.String(), "Available Commands") {
+		t.Errorf("want the help, got:\n%s", out.String())
 	}
 }

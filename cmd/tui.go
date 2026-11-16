@@ -67,6 +67,17 @@ var tuiCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(tuiCmd)
+	rootCmd.RunE = runBareRoot
+}
+
+// runBareRoot is `boxctl` with no subcommand: the tui, as `boxctl tui`
+// (onctl does the same). Off a terminal -- a pipe, a script -- or
+// before a login it prints the help, which `boxctl --help` always does.
+func runBareRoot(cmd *cobra.Command, args []string) error {
+	if cfg == nil || cfg.Token == "" || !isTTY() || !term.IsTerminal(int(os.Stdin.Fd())) {
+		return cmd.Help()
+	}
+	return tuiCmd.RunE(tuiCmd, args)
 }
 
 // tuiRefreshEvery paces the list's own refreshes while nothing else is
