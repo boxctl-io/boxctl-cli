@@ -339,8 +339,9 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   argv, never disk.
   `cmd/mux.go` is what keeps that session alive on the box between
   attaches: the `multiplexer` interface (start-or-attach, detached
-  start, running check, listing for `claude ls`, install), `tmuxMux`
-  (the default) and `herdrMux` (`--mux herdr`, `BOXCTL_MUX`), read from
+  start, running check, listing for `claude ls`, install), `herdrMux`
+  and `tmuxMux` (`--mux`, `BOXCTL_MUX`, else `boxAgent.mux`: herdr for
+  `claude` -- and so the tui's `:repos` -- tmux for `kilo`), read from
   the `mux` global that `boxAgent.runs` sets. tmux: one session per
   `taskSession`, always `tmux ... -t =<name>` -- a bare `-t claude`
   prefix-matches `claude-auth`. herdr (verified against 0.9.5, which
@@ -358,7 +359,9 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   return. `mux.start` records the choice in `/root/.boxctl/mux`, which
   `projectCheckScript` reports with the project status, and `useBoxMux`
   takes it unless `--mux` was given (then a session running in the other
-  one is refused). `runRepo` with an existing `--box` doesn't read it:
+  one is refused). A box with no record defaulting to herdr is probed
+  for a running tmux session first (boxes from before herdr was
+  `claude`'s default), and attached in tmux if there is one. `runRepo` with an existing `--box` doesn't read it:
   the flag or its default decides there. Adding a multiplexer is another
   `multiplexer` in `mux.go` plus `muxNamed`.
   A box that outlives the run (`--keep`/`--box`/`--detach`/`--task`,

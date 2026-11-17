@@ -219,3 +219,17 @@ func TestHerdrStartAfterServerRestart(t *testing.T) {
 		t.Errorf("the restored workspace must go before the session's is made:\n%s", calls)
 	}
 }
+
+func TestAgentDefaultMux(t *testing.T) {
+	t.Setenv(muxEnv, "")
+	if got := claudeAgent.defaultMux(); got != "herdr" {
+		t.Errorf("claude's default = %q, want herdr", got)
+	}
+	if got := kiloAgent.defaultMux(); got != "tmux" {
+		t.Errorf("kilo's default = %q, want tmux", got)
+	}
+	t.Setenv(muxEnv, "tmux")
+	if got := claudeAgent.defaultMux(); got != "tmux" {
+		t.Errorf("claude's default with %s=tmux = %q, want tmux", muxEnv, got)
+	}
+}
