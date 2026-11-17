@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // fakeHerdr puts a herdr on PATH that logs its calls to the returned
@@ -231,5 +233,30 @@ func TestAgentDefaultMux(t *testing.T) {
 	t.Setenv(muxEnv, "tmux")
 	if got := claudeAgent.defaultMux(); got != "tmux" {
 		t.Errorf("claude's default with %s=tmux = %q, want tmux", muxEnv, got)
+	}
+}
+
+// The multiplexer a run uses is its own command's --mux default, though
+// claude and kilo bind the same variable.
+func TestRunsTakesItsCommandsMux(t *testing.T) {
+	savedMux, savedArg, savedAgent, savedModel := mux, muxArg, agent, runModel
+	t.Cleanup(func() { mux, muxArg, agent, runModel = savedMux, savedArg, savedAgent, savedModel })
+	for _, tc := range []struct {
+		name string
+		a    *boxAgent
+		want string
+	}{{"claude", claudeAgent, "herdr"}, {"kilo", kiloAgent, "tmux"}} {
+		c, _, err := rootCmd.Find([]string{tc.name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		run := tc.a.runs(func(*cobra.Command, []string) error { got = mux.name(); return nil })
+		if err := run(c, nil); err != nil {
+			t.Fatal(err)
+		}
+		if got != tc.want {
+			t.Errorf("%s ran in %s, want %s", tc.name, got, tc.want)
+		}
 	}
 }

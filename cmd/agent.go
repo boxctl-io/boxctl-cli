@@ -49,6 +49,13 @@ func (a *boxAgent) runs(run func(*cobra.Command, []string) error) func(*cobra.Co
 	return func(cmd *cobra.Command, args []string) error {
 		agent = a
 		runModel = nil
+		// claude and kilo bind the same muxArg, and registering kilo's
+		// flag wrote its default (tmux) over claude's: unless --mux was
+		// given, take this agent's own default (ls/fetch/push have no
+		// --mux at all).
+		if f := cmd.Flags().Lookup("mux"); f == nil || !f.Changed {
+			muxArg = a.defaultMux()
+		}
 		m, err := muxNamed(muxArg)
 		if err != nil {
 			return err
