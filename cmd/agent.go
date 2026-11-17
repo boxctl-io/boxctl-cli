@@ -23,11 +23,15 @@ type boxAgent struct {
 	// promptFlag is the flag a new session's first message goes after;
 	// "" when it's a plain argument.
 	promptFlag string
+	// mux is the multiplexer its sessions run in when neither --mux nor
+	// BOXCTL_MUX says otherwise.
+	mux string
 }
 
 var claudeAgent = &boxAgent{
 	name: "claude", title: "Claude", product: "Claude Code",
 	bin: "claude", binDir: ".local/bin", install: claudeInstall,
+	mux: "herdr",
 }
 
 // agent is the one the running command is for.
@@ -83,6 +87,6 @@ func (a *boxAgent) addFlags(c *cobra.Command) {
 	c.Flags().BoolVarP(&claudeKeep, "keep", "k", false, a.fill("use the project's own box, {agent}-<project>, and keep it -- instead of a new box deleted when the run ends (--box, --detach and --task keep it too)"))
 	c.Flags().BoolVarP(&claudeForce, "force", "f", false, "copy a project directory even if it isn't a git repository")
 	c.Flags().DurationVar(&claudeIdle, "idle-ttl", claudeDefaultIdleTTL, "pause the box after this long unused, 10m to 720h (set on a new box, or on an existing one when given)")
-	c.Flags().StringVar(&muxArg, "mux", defaultMux(), a.fill("what keeps {Agent} running on the box between attaches: tmux, or herdr (herdr.dev, installed on the box the first time). "+muxEnv+" sets the default; a box keeps the one its sessions started in"))
+	c.Flags().StringVar(&muxArg, "mux", a.defaultMux(), a.fill("what keeps {Agent} running on the box between attaches: tmux, or herdr (herdr.dev, installed on the box the first time). "+muxEnv+" sets the default; a box keeps the one its sessions started in"))
 	_ = c.RegisterFlagCompletionFunc("mux", cobra.FixedCompletions([]string{"tmux", "herdr"}, cobra.ShellCompDirectiveNoFileComp))
 }

@@ -84,7 +84,7 @@ branch boxctl/<project>-<random> for Claude to work on; nothing local,
 uncommitted or unpushed, goes -- and anything else is copied. Then it
 installs Claude Code and your Claude configuration, and starts Claude in
 it. When Claude exits or you
-detach (Ctrl-b d; Ctrl-b q in herdr), the box's branches and uncommitted work are fetched
+detach (Ctrl-b q; Ctrl-b d with --mux tmux), the box's branches and uncommitted work are fetched
 here as box/* (as boxctl claude fetch does) and the box is deleted.
 
 A dropped connection doesn't end the run: Claude keeps going on the box
@@ -92,12 +92,13 @@ and boxctl reconnects as soon as it can reach it again. Ctrl-C while
 it's reconnecting gives up and keeps the box, to come back to with --box.
 
 --keep uses the project's own box (claude-<project>) instead, and keeps
-it: Claude runs in tmux, so it keeps going when you detach, and
-boxctl claude --keep comes back to it. --mux herdr runs it in herdr
-(herdr.dev) instead: a terminal workspace manager made for coding agents
-that shows every task on the box in one window, each marked working,
-blocked or idle; Ctrl-b q detaches. BOXCTL_MUX=herdr makes it the default,
-and a box keeps using whichever its sessions were started in. The box's
+it: Claude runs in herdr (herdr.dev), so it keeps going when you detach,
+and boxctl claude --keep comes back to it. herdr is a terminal workspace
+manager made for coding agents that shows every task on the box in one
+window, each marked working, blocked or idle; Ctrl-b q detaches.
+--mux tmux runs it in tmux instead (Ctrl-b d detaches), BOXCTL_MUX=tmux
+makes that the default, and a box keeps using whichever its sessions
+were started in. The box's
 copy of the project is the one Claude works on: later runs don't copy it
 again, and nothing is synced back -- Claude commits and pushes from the
 box. --box, --detach and --task keep their box too.
@@ -570,8 +571,17 @@ func openClaudeBox(ctx context.Context, create, setTTL bool) (*claudeTarget, err
 // started in, recorded on it by mux.start -- the run's, unless --mux was
 // given: then a session running in the other one is refused, rather than
 // started again beside it. A box with no record (nothing started yet, or
-// from before the record) takes --mux or its default.
+// from before the record) takes --mux or its default -- except that a
+// tmux session already running there, from before herdr was claude's
+// default, is attached rather than started again in herdr.
 func useBoxMux(ctx context.Context, box *boxSSH, dir, name string) error {
+	if name == "" && !muxExplicit && mux.name() != "tmux" {
+		t := tmuxMux{}
+		if box.run(ctx, t.running(newTaskSession(dir, claudeTask)), nil) == nil {
+			mux = t
+		}
+		return nil
+	}
 	if name == "" || name == mux.name() {
 		return nil
 	}

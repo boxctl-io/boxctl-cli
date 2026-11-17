@@ -184,7 +184,7 @@ Claude exits or you detach -- the box's branches and uncommitted work are
 fetched here as `box/*` (what `boxctl claude fetch` does) and the box is
 deleted -- or kept, with a message, if that fetch fails. A dropped
 connection (a train through a tunnel) doesn't end the run: Claude keeps
-going in tmux (or herdr, below) and boxctl reconnects once the box is reachable again;
+going in herdr (or tmux, below) and boxctl reconnects once the box is reachable again;
 Ctrl-C while it waits keeps the box, to attach again with `--box`. Ctrl-C during
 setup deletes it too. `--keep` uses the project's long-lived box
 (`claude-<directory>`) instead, as described below; `--box`, `--detach`
@@ -228,7 +228,7 @@ request was opened doesn't matter). Otherwise it's kept and you're told
 what's left on it; it's kept too if you detach with Claude still running,
 or pass `--keep` (come back with `boxctl claude --box <box>`). With
 `--goal "..."` Claude doesn't wait for you: it runs `claude -p` to the end
-in a detached tmux session, then opens a pull request with `gh pr create`
+in a detached herdr workspace, then opens a pull request with `gh pr create`
 whose body has the goal and a summary. `boxctl claude` prints the box, the
 branch and the `boxctl claude logs <box>` command and returns; closing
 the terminal changes nothing. Without `--repo`, `--goal` uses the git
@@ -362,8 +362,8 @@ forgets it. Without a saved token, it falls back to `/login` on the box.
 
 **Several things at once.** `--task <name>` runs another Claude on the
 same box, in a git worktree of its own -- `<dir>@<name>`, on branch
-`<name>`, made from what the box's main checkout has -- in its own tmux
-session (or herdr workspace), so the two never touch each other's files. Starting one takes
+`<name>`, made from what the box's main checkout has -- in its own herdr
+workspace (or tmux session), so the two never touch each other's files. Starting one takes
 seconds: no copy, no install, no login. `boxctl claude --task auth`
 again attaches to it; `boxctl claude ls` lists them all, running or
 not. They share the box's CPU, memory and ports -- `--task <name>
@@ -390,22 +390,25 @@ Claude Code with Anthropic's installer (only if the image lacks it; the
 `@path`, if they are under `~/.claude`; others are skipped with a warning),
 `agents/`, `skills/`, `commands/` and `settings.json` (minus hooks, the
 status line, plugins, `env` and credential helpers, which point at this
-machine), and starts `claude` in tmux. Log it in once with `/login`: it
+machine), and starts `claude` in herdr (below). Log it in once with `/login`: it
 prints a URL to open here and a code to paste back, and the login stays
 on the box.
 
-**herdr instead of tmux.** `--mux herdr` runs Claude in
-[herdr](https://herdr.dev) rather than tmux: a terminal workspace manager
+**herdr, or tmux.** Claude runs in
+[herdr](https://herdr.dev) by default: a terminal workspace manager
 made for coding agents, installed on the box the first time (its own
 installer, to `/usr/local/bin`). The box runs one herdr server, and each
 session -- the main checkout, every `--task`, a `--goal` run -- is a
 workspace of it labeled with the session's name, so an attached herdr
 shows every Claude on the box in its sidebar, marked working, blocked or
 idle, and `boxctl claude ls` shows that state in its ACTIVE column.
-`Ctrl-b q` detaches (`Ctrl-b d` in tmux); `Ctrl-b w` switches workspaces.
-`BOXCTL_MUX=herdr` makes it the default. A box remembers which one its
-sessions were started in, so later runs and `ls` look there without the
-flag; `--mux` the other way on such a box is refused only while a session
+`Ctrl-b q` detaches; `Ctrl-b w` switches workspaces. `--mux tmux` runs
+it in tmux instead (`Ctrl-b d` detaches), and `BOXCTL_MUX=tmux` makes
+that the default (`boxctl kilo` stays on tmux unless told otherwise). A
+box remembers which one its sessions were started in, so later runs and
+`ls` look there without the flag -- and a box from before herdr was the
+default, with Claude still running in tmux, is attached in tmux; `--mux`
+the other way on such a box is refused only while a session
 is running in the first. herdr's Claude Code integration (a session hook)
 is installed on the box too, so a restored herdr can resume the session.
 

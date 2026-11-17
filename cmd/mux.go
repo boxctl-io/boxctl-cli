@@ -12,10 +12,10 @@ import (
 
 // A multiplexer keeps an agent's session running on the box between
 // attaches -- across a detach, a dropped connection, a --detach start.
-// tmux is the default. herdr (herdr.dev) is the alternative, --mux herdr:
-// a terminal workspace manager made for coding agents, which tells a
-// working one from a blocked one from an idle one, and shows every task
-// on the box in one window. Which one a box uses is recorded on it
+// herdr (herdr.dev) is claude's default, tmux kilo's; --mux picks either.
+// herdr is a terminal workspace manager made for coding agents, which
+// tells a working one from a blocked one from an idle one, and shows
+// every task on the box in one window. Which one a box uses is recorded on it
 // (muxMarker) when a session starts, so later runs -- attaching again,
 // claude ls -- look for the session where it is without being told.
 type multiplexer interface {
@@ -38,10 +38,7 @@ type multiplexer interface {
 	parseList(out string) map[string]string
 }
 
-const (
-	muxEnv     = "BOXCTL_MUX"
-	muxDefault = "tmux"
-)
+const muxEnv = "BOXCTL_MUX"
 
 var (
 	// muxMarker on the box records which multiplexer its sessions run in.
@@ -69,12 +66,16 @@ func muxNamed(name string) (multiplexer, error) {
 	return nil, fmt.Errorf("--mux must be tmux or herdr, not %q", name)
 }
 
-// defaultMux is --mux's default: BOXCTL_MUX, else tmux.
-func defaultMux() string {
+// defaultMux is a's --mux default: BOXCTL_MUX, else the agent's own
+// (herdr for claude, tmux for kilo).
+func (a *boxAgent) defaultMux() string {
 	if v := os.Getenv(muxEnv); v != "" {
 		return v
 	}
-	return muxDefault
+	if a.mux != "" {
+		return a.mux
+	}
+	return "tmux"
 }
 
 // muxMarkScript is shell that records name as the box's multiplexer.
