@@ -406,6 +406,9 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	if claudePR != 0 {
 		newBoxLabels["boxctl.pr"] = strconv.Itoa(claudePR)
 	}
+	if claudeQueueItem != 0 {
+		newBoxLabels["boxctl.queue"] = strconv.Itoa(claudeQueueItem)
+	}
 
 	localDir := ""
 	if len(claudeRepos) == 0 {

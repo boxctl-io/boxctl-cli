@@ -197,7 +197,7 @@ var reposView = &tableView{
 	columns:  []column{{"REPO", 'R'}, {"PUSHED", 'P'}, {"LANGUAGE", 'L'}, {"VISIBILITY", 'V'}, {"DESCRIPTION", 'D'}},
 	stateCol: 3,
 	empty:    "No repositories: gh lists the ones its account can reach (gh auth login).",
-	hotkeys:  []hotkey{{"enter", "claude on a new box"}, {"g", "goal run"}, {"d", "describe"}, {"y", "json"}, {"R", "refresh"}},
+	hotkeys:  []hotkey{{"enter", "claude on a new box"}, {"g", "goal run"}, {"a", "queue a goal"}, {"d", "describe"}, {"y", "json"}, {"R", "refresh"}},
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow
 		for _, r := range m.repos {

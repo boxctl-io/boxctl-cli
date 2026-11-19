@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/boxctl-io/boxctl-cli/internal/client"
+	"github.com/boxctl-io/boxctl-cli/internal/queue"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,7 +32,7 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your boxes in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your boxes, laid out like k9s.
 
-  :boxes :urls :images :sizes :backups :repos   switch view (also :q, :help, :create)
+  :boxes :urls :images :sizes :backups :repos :queue   switch view (also :q, :help, :create)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the box; y its JSON; l a --goal run's log
@@ -39,6 +40,10 @@ var tuiCmd = &cobra.Command{
   enter        in :repos (your GitHub repos, newest push first, from gh),
                start Claude on a fresh box with the repo cloned (boxctl claude --repo)
   g            in :repos, ask for a goal and run it unattended there (--goal)
+  a            in :repos or :queue, queue a goal (boxctl queue): run when a slot
+               is free, its PR watched -- CI and conflicts get follow-up runs;
+               in :queue m merges a ready PR, r retries, ctrl-d cancels, o opens it
+               While the tui is open it runs the queue (as boxctl queue run does).
   c            create a box (name, image and size are asked)
   p / r / K    pause / resume / keep (hold off the idle reaper's deletion)
   e            expose a port at a public URL; ctrl-d in :urls takes it down
@@ -53,7 +58,17 @@ var tuiCmd = &cobra.Command{
 		}
 		// Restore polls with a spinner on stderr; the screen is ours.
 		client.QuietProgress()
-		p := tea.NewProgram(newTUI(newClient()), tea.WithAltScreen())
+		m := newTUI(newClient())
+		if qr, err := newQueueRunner(m.c); err == nil {
+			m.qr = qr
+			defer func() {
+				if n := qr.inFlight(); n > 0 {
+					fmt.Fprintf(os.Stderr, "Waiting for %d queue run(s) to finish starting (Ctrl-C leaves them half-started)...\n", n)
+				}
+				qr.release()
+			}()
+		}
+		p := tea.NewProgram(m, tea.WithAltScreen())
 		final, err := p.Run()
 		if err != nil {
 			return err
@@ -97,6 +112,7 @@ type (
 		sizes    []client.Size
 		backups  []client.Backup
 		repos    []ghRepo
+		queue    *queue.Queue
 		err      error
 	}
 	tuiActionMsg struct {
@@ -175,6 +191,7 @@ type tuiModel struct {
 	backups []client.Backup
 	repos   []ghRepo        // GitHub's, newest push first (tuirepos.go)
 	reposAt time.Time       // when repos came from GitHub, or the cache did
+	queue   *queue.Queue    // ~/.boxctl/queue.json (tuiqueue.go)
 	loaded  map[string]bool // resources listed at least once
 	loading map[string]bool // listings in flight
 
@@ -195,6 +212,13 @@ type tuiModel struct {
 	flashErr bool
 	flashID  int
 
+	// qr runs the queue's passes while the tui is open (nil in tests);
+	// queueHeld names the other boxctl running them instead, if one is.
+	qr           *queueRunner
+	queuePassing bool
+	queuePassAt  time.Time
+	queueHeld    string
+
 	width, height int
 	refreshedAt   time.Time
 	fatal         error
@@ -207,7 +231,7 @@ func newTUI(c *client.Client) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, create, help, q"
+	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, queue, create, help, q"
 	cmd.CharLimit = 80
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: spinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
@@ -225,7 +249,7 @@ func newTUI(c *client.Client) tuiModel {
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	return tea.Batch(m.list("boxes"), m.tick(), m.spin.Tick)
+	return tea.Batch(m.list("boxes"), m.tick(), m.spin.Tick, loadQueueMsg)
 }
 
 // top is the page shown.
@@ -245,6 +269,9 @@ func (m *tuiModel) pop() {
 func (m *tuiModel) list(resource string) tea.Cmd {
 	if resource == "repos" {
 		return m.listRepos(false)
+	}
+	if resource == "queue" {
+		return loadQueueMsg
 	}
 	if m.loading[resource] {
 		return nil
@@ -325,7 +352,24 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tuiTickMsg:
-		return m, tea.Batch(m.refresh(), m.tick())
+		cmds := []tea.Cmd{m.refresh(), m.tick()}
+		if time.Since(m.queuePassAt) >= queuePassEvery {
+			cmds = append(cmds, m.queuePass())
+		}
+		return m, tea.Batch(cmds...)
+
+	case tuiQueuePassMsg:
+		return m, m.queuePassed(msg)
+
+	case tuiQueueDoneMsg:
+		if msg.err != nil {
+			return m, tea.Batch(m.fail("%v", msg.err), loadQueueMsg)
+		}
+		if msg.text == "" {
+			return m, nil
+		}
+		m.queuePassAt = time.Time{} // a pass soon, so the change takes effect
+		return m, tea.Batch(m.say("%s", msg.text), loadQueueMsg, m.queuePass())
 
 	case bspinner.TickMsg:
 		if !m.busy() {
@@ -362,6 +406,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "repos":
 			m.repos = msg.repos
 			m.reposAt = time.Now()
+		case "queue":
+			m.queue = msg.queue
 		}
 		// A describe/json page follows its box.
 		for i := range m.pages {

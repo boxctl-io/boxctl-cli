@@ -432,6 +432,23 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `origin/<default>` is there to merge); `prGoalPrompt` says push to it,
   never force-push, open no new PR. The runner is unchanged: its `gh pr
   list --head` finds the existing PR, so a goal still ends `done`.
+- `internal/queue/`, `cmd/queue.go`, `cmd/queuerun.go`, `cmd/tuiqueue.go`
+  — `boxctl queue` and the tui's `:queue`: the boxctl-orchestrator design
+  (boxctl-orchestrator's `docs/designs/boxctl_orchestrator.md`) built into
+  the CLI on top of goal runs, instead of its own runner, SQLite and
+  harness. `internal/queue` is the state (`~/.boxctl/queue.json`, written
+  only through `Update`, which holds `queue.json.lock`) and `Decide`, the
+  pure engine: one pass's observations (every box's `run_status` from one
+  `List`, each PR from one GraphQL query) in, state changes made and
+  actions out -- tested as tables, keep it free of I/O. `queuerun.go` is
+  the I/O: a run is `boxctl claude --repo R --box q<id>-<kind>-<n>
+  --queue-item <id> --goal ...` (`--pr N` for a follow-up) run as a child
+  process, output in `~/.boxctl/queue/logs/`, and `launching` is what
+  keeps a pass from calling a run still being set up lost. A refusal
+  (`isRefusal` matches `internal/client`'s `refusalMessage` text) drops
+  the run uncharged and backs off. The passes run in the tui every
+  `queuePassEvery` (any view) or in `boxctl queue run`; `Queue.Claim`
+  keeps it to one loop. Follow-up prompts are `queue.GoalFor`.
 - `cmd/imagepick.go` — the image of a new agent box: `--image`, else the
   stack (`stacks`, `stackOfFiles`) matched against `/api/images`
   (`pickImage`), else `claude-agent`; `sayNote` prints which and why.
