@@ -342,6 +342,12 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	if err := checkRepoFlags(goal, claudeGitHub, conflicts); err != nil {
 		return err
 	}
+	if err := checkPRFlags(claudePR, repos, claudeIssue); err != nil {
+		return err
+	}
+	if claudePR != 0 && claudeGoal == "" {
+		slugText = fmt.Sprintf("pr %d", claudePR)
+	}
 	model, args, err := chooseModel(args)
 	if err != nil {
 		return err
@@ -390,7 +396,16 @@ func runRepo(cmd *cobra.Command, args []string) error {
 		}
 	}
 	branch := gen.branch()
+	if claudePR != 0 {
+		// The pull request's branch, not a new one; checked before any box.
+		if branch, err = prBranch(ctx, repos[0], claudePR, token); err != nil {
+			return err
+		}
+	}
 	newBoxLabels = runLabels(goal != "", repos, branch, claudeIssue)
+	if claudePR != 0 {
+		newBoxLabels["boxctl.pr"] = strconv.Itoa(claudePR)
+	}
 
 	localDir := ""
 	if len(claudeRepos) == 0 {
@@ -434,6 +449,9 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	for i, repo := range repos {
 		fmt.Fprintf(os.Stderr, "Cloning %s on %s...\n", repo, name)
 		clone := cloneScript("https://github.com/"+repo+".git", dirs[i], branch)
+		if claudePR != 0 {
+			clone = cloneBranchScript("https://github.com/"+repo+".git", dirs[i], branch)
+		}
 		if err := box.run(ctx, clone, nil); err != nil {
 			return fmt.Errorf("cloning %s on %s: %w", repo, name, err)
 		}
@@ -472,7 +490,11 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	if err := stageClaudeEnv(ctx, box, sess, env); err != nil {
 		return fmt.Errorf("passing Claude its credentials: %w", err)
 	}
-	if err := box.run(ctx, "umask 077 && mkdir -p "+shellQuote(g.goalDir)+" && cat >"+shellQuote(g.goalDir+"/prompt.txt"), strings.NewReader(goalPrompt(goal, repos, dirs, branch))); err != nil {
+	prompt := goalPrompt(goal, repos, dirs, branch)
+	if claudePR != 0 {
+		prompt = prGoalPrompt(goal, repos[0], claudePR, branch)
+	}
+	if err := box.run(ctx, "umask 077 && mkdir -p "+shellQuote(g.goalDir)+" && cat >"+shellQuote(g.goalDir+"/prompt.txt"), strings.NewReader(prompt)); err != nil {
 		return fmt.Errorf("writing the goal on %s: %w", name, err)
 	}
 	if err := box.run(ctx, "cat >"+shellQuote(g.goalDir+"/run.sh")+" && ln -sfn "+shellQuote(g.goalDir)+" "+boxGoalsDir+"/latest", strings.NewReader(g.runnerScript())); err != nil {

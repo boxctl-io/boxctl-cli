@@ -424,6 +424,14 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `--dangerously-skip-permissions` unless that variable is exactly the
   string `1` (not `true`/`yes`), so keep it that way. Whether the
   harness's deny rules still hold under the flag is not verified.
+- `cmd/claudepr.go` — `claude --repo R --pr N [--goal ...]`: a run on
+  an open pull request's branch instead of a new one (the follow-up
+  `:queue` starts for a CI or conflict fix). `prBranch` asks GitHub for
+  the head branch before any box and refuses a closed PR or a fork's
+  branch; `cloneBranchScript` clones it and fetches every branch (so
+  `origin/<default>` is there to merge); `prGoalPrompt` says push to it,
+  never force-push, open no new PR. The runner is unchanged: its `gh pr
+  list --head` finds the existing PR, so a goal still ends `done`.
 - `cmd/imagepick.go` — the image of a new agent box: `--image`, else the
   stack (`stacks`, `stackOfFiles`) matched against `/api/images`
   (`pickImage`), else `claude-agent`; `sayNote` prints which and why.
