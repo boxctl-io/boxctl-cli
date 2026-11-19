@@ -167,6 +167,17 @@ func (m *tuiModel) prompt(title string, body []string, placeholder string, submi
 func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	key := msg.String()
+	if t.view == queueView {
+		if md, cmd, ok := m.handleQueueKey(key); ok {
+			return md, cmd
+		}
+	}
+	if t.view == reposView && key == "a" {
+		if r := m.currentRow(); r != nil {
+			return m.askQueueGoal(r.key)
+		}
+		return m, nil
+	}
 	switch key {
 	case "up", "k":
 		m.move(-1)

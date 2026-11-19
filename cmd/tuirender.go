@@ -55,6 +55,10 @@ var k9s = struct {
 		"failed":       lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
 		"private":      lipgloss.NewStyle().Foreground(lipgloss.Color("220")),
 		"archived":     lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
+		"queued":       lipgloss.NewStyle().Foreground(lipgloss.Color("51")),
+		"needs you":    lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
+		"done":         lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
+		"cancelled":    lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
 	},
 }
 
@@ -214,10 +218,14 @@ func (m tuiModel) infoBlock() []string {
 	} else if len(m.loading) > 0 {
 		status = m.spin.View() + " " + refreshed
 	}
+	showing := kv("Showing", m.stateFilter.String())
+	if t := m.top(); t.kind == pageTable && t.view == queueView {
+		showing = kv("Queue", m.queueSummary())
+	}
 	return []string{
 		kv("API", host),
 		kv("Boxes", boxes),
-		kv("Showing", m.stateFilter.String()),
+		showing,
 		kv("Refreshed", status),
 		kv("Rev", Version),
 	}
