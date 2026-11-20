@@ -150,10 +150,38 @@ func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case tea.KeyEnter:
 			m.dialog = nil
-			return d.submit(m, strings.TrimSpace(d.input.Value()))
+			return d.submit(m, d.value(&m))
 		}
+		if d.choices != nil {
+			matches := d.matches(&m)
+			switch msg.String() {
+			case "up", "ctrl+p", "shift+tab":
+				if len(matches) > 0 {
+					d.sel = (d.sel - 1 + len(matches)) % len(matches)
+					d.picked = true
+				}
+				return m, nil
+			case "down", "ctrl+n":
+				if len(matches) > 0 {
+					d.sel = (d.sel + 1) % len(matches)
+					d.picked = true
+				}
+				return m, nil
+			case "tab":
+				if len(matches) > 0 {
+					d.input.SetValue(matches[min(d.sel, len(matches)-1)])
+					d.input.CursorEnd()
+					d.sel, d.picked = 0, false
+				}
+				return m, nil
+			}
+		}
+		before := d.input.Value()
 		var cmd tea.Cmd
 		*d.input, cmd = d.input.Update(msg)
+		if d.input.Value() != before {
+			d.sel, d.picked = 0, false
+		}
 		return m, cmd
 	}
 	m.dialog = nil
@@ -161,6 +189,57 @@ func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return d.yes(m)
 	}
 	return m, nil
+}
+
+// matches are the dialog's choices that fit the text typed so far, best
+// first: those it starts, then those whose name after the owner it
+// starts, then those containing it anywhere (case aside). No text
+// matches them all.
+func (d *tuiDialog) matches(m *tuiModel) []string {
+	if d.choices == nil {
+		return nil
+	}
+	all := d.choices(m)
+	q := strings.ToLower(strings.TrimSpace(d.input.Value()))
+	if q == "" {
+		return all
+	}
+	var first, second, third []string
+	for _, c := range all {
+		l := strings.ToLower(c)
+		_, name, _ := strings.Cut(l, "/")
+		switch {
+		case strings.HasPrefix(l, q):
+			first = append(first, c)
+		case strings.HasPrefix(name, q):
+			second = append(second, c)
+		case strings.Contains(l, q):
+			third = append(third, c)
+		}
+	}
+	return append(append(first, second...), third...)
+}
+
+// value is what enter submits: the selected choice when up/down picked
+// one, or when the text alone isn't a choice and can't be one (no
+// owner/name) but matches some; else the text.
+func (d *tuiDialog) value(m *tuiModel) string {
+	v := strings.TrimSpace(d.input.Value())
+	if d.choices == nil {
+		return v
+	}
+	matches := d.matches(m)
+	if len(matches) == 0 {
+		return v
+	}
+	sel := matches[min(d.sel, len(matches)-1)]
+	if d.picked {
+		return sel
+	}
+	if _, _, err := parseRepo(v); err != nil || v == "" {
+		return sel
+	}
+	return v
 }
 
 // ask opens a y/N question.
