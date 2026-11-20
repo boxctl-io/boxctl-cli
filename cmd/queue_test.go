@@ -297,6 +297,58 @@ func TestTUIQueue(t *testing.T) {
 	}
 }
 
+// A goal longer than the terminal is wide wraps on the describe page,
+// so all of it can be read, and scrolling reaches its last line.
+func TestTUIQueueDescribeWraps(t *testing.T) {
+	stubQueue(t, nil, func([]string) ([]byte, error) { return nil, nil })
+	c, _ := fakeBoxServer(t, tuiFixture())
+	m := newTUI(c)
+	m.width, m.height = 60, 20
+	goal := strings.Repeat("make the thing better ", 30) + "THE-END"
+	if _, err := addQueueItem("o/r", goal, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	q, err := loadQueue()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.queue = q
+	m.loaded["queue"] = true
+	m.pages = []page{{kind: pageTable, view: queueView, sortCol: -1}}
+	m, _ = press(t, m, "d")
+	if m.top().kind != pageText {
+		t.Fatalf("d didn't describe: %+v", m.top())
+	}
+	lines := m.textLines()
+	var text strings.Builder
+	for _, l := range lines {
+		if w := len(l); w > m.width-3 {
+			t.Errorf("line wider than the box (%d): %q", w, l)
+		}
+		text.WriteString(strings.TrimSpace(l) + " ")
+	}
+	if !strings.Contains(text.String(), strings.TrimSpace(goal)) {
+		t.Errorf("goal not all there:\n%s", strings.Join(lines, "\n"))
+	}
+	m, _ = press(t, m, "G")
+	if !strings.Contains(m.View(), "THE-END") {
+		t.Errorf("end of the goal not shown after G:\n%s", m.View())
+	}
+}
+
+func TestWrapLines(t *testing.T) {
+	got := wrapLines([]string{"Note:       one two three four five", "short", "  abcdefghijkl mnop"}, 26)
+	want := []string{"Note:       one two three", "            four five", "short", "  abcdefghijkl mnop"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+	got = wrapLines([]string{"  aaaa bbbb cccc dddd", "xxxxxxxxxxxx"}, 10)
+	want = []string{"  aaaa", "  bbbb", "  cccc", "  dddd", "xxxxxxxxxx", "xx"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
 // TestTUIQueueRepoChoices: the queue's `a` lists repositories -- the
 // current item's first, then the other queued ones, then :repos' -- that
 // typing narrows, up/down selects and tab completes.
