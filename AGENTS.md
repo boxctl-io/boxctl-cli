@@ -357,7 +357,11 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   file in `/run/boxctl` (a typed line is capped by the tty); "running" is
   "a workspace with that label exists", since a pane's exit closes its
   workspace; `herdr status` exits 0 without a server, so `workspace
-  list` is the probe. A server started afresh restores its last layout
+  list` is the probe. `herdrMux.setup` puts `onboarding = false` at the top of the
+  box's `~/.config/herdr/config.toml` (unless it already sets
+  `onboarding`): otherwise every attach opens on herdr's welcome and
+  integrations picker. `boxAgent.setupScript` also adds the agent's
+  directory to `~/.bashrc`'s PATH, so `claude` works in a pane's shell. A server started afresh restores its last layout
   as plain shells, so the start closes those before making the
   session's workspace. An attached client doesn't end when its workspace
   does -- it opens a plain shell one -- so an ephemeral run's pane runs

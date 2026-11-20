@@ -271,3 +271,56 @@ func TestRunsTakesItsCommandsMux(t *testing.T) {
 		}
 	}
 }
+
+// TestHerdrSetupConfig: setup turns herdr's first-run screen off, keeps
+// a config that's there, leaves one that already decided alone, and puts
+// the agent on an interactive shell's PATH -- each once, however often
+// it runs.
+func TestHerdrSetupConfig(t *testing.T) {
+	log := fakeHerdr(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	defer func(m multiplexer, a *boxAgent) { mux, agent = m, a }(mux, agent)
+	mux, agent = herdrMux{}, claudeAgent
+	bin := filepath.Join(home, claudeAgent.binDir)
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, claudeAgent.bin), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(home, ".config", "herdr", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte("[theme]\nname = \"nord\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if out, err := exec.Command("sh", "-c", agent.setupScript()).CombinedOutput(); err != nil {
+			t.Fatalf("run %d: %v: %s", i, err, out)
+		}
+	}
+	got := readFile(t, cfg)
+	if !strings.HasPrefix(got, "# boxctl: no first-run screen on a box\nonboarding = false\n[theme]\nname = \"nord\"\n") || strings.Count(got, "onboarding") != 1 {
+		t.Errorf("config.toml:\n%s", got)
+	}
+	if calls := readFile(t, log); strings.Count(calls, "server reload-config") != 1 {
+		t.Errorf("reloads:\n%s", calls)
+	}
+	rc := readFile(t, filepath.Join(home, ".bashrc"))
+	if want := `export PATH="$HOME/` + claudeAgent.binDir + `:$PATH"`; strings.Count(rc, want) != 1 {
+		t.Errorf(".bashrc:\n%s", rc)
+	}
+
+	// Someone chose onboarding: theirs stands.
+	if err := os.WriteFile(cfg, []byte("onboarding = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("sh", "-c", agent.setupScript()).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if got := readFile(t, cfg); got != "onboarding = true\n" {
+		t.Errorf("a chosen onboarding was changed:\n%s", got)
+	}
+}
