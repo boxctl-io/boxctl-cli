@@ -16,27 +16,27 @@ import (
 	"sync"
 	"time"
 
+	"github.com/boxctl-io/boxctl-cli/internal/backlog"
 	"github.com/boxctl-io/boxctl-cli/internal/client"
-	"github.com/boxctl-io/boxctl-cli/internal/queue"
 )
 
-// The queue's loop: what a pass observes and what it does about it. The
-// decisions are internal/queue's (Decide); this is the I/O around them,
-// shared by the tui (a pass every queuePassEvery while it's open) and
-// `boxctl queue run` (the same, with no screen). A run is `boxctl claude
+// The backlog's loop: what a pass observes and what it does about it. The
+// decisions are internal/backlog's (Decide); this is the I/O around them,
+// shared by the tui (a pass every backlogPassEvery while it's open) and
+// `boxctl backlog dispatch` (the same, with no screen). A run is `boxctl claude
 // --repo R --box <name> --goal "..."` (plus --pr N for a follow-up) run as
-// a child process, its output kept in ~/.boxctl/queue/logs/<box>.log.
+// a child process, its output kept in ~/.boxctl/backlog/logs/<box>.log.
 
-// queuePassEvery paces the passes.
-const queuePassEvery = 30 * time.Second
+// backlogPassEvery paces the passes.
+const backlogPassEvery = 30 * time.Second
 
-// queueBackoff is how long new runs wait after boxctl refused a box.
-const queueBackoff = 2 * time.Minute
+// backlogBackoff is how long new runs wait after boxctl refused a box.
+const backlogBackoff = 2 * time.Minute
 
-type queueRunner struct {
+type backlogRunner struct {
 	path  string
 	c     *client.Client
-	owner string // who this loop is, in the queue file's Loop
+	owner string // who this loop is, in the backlog file's Loop
 	exe   string // this boxctl, to run `boxctl claude` with
 
 	mu        sync.Mutex
@@ -44,8 +44,8 @@ type queueRunner struct {
 	wg        sync.WaitGroup
 }
 
-func newQueueRunner(c *client.Client) (*queueRunner, error) {
-	path, err := queue.Path()
+func newBacklogRunner(c *client.Client) (*backlogRunner, error) {
+	path, err := backlog.Path()
 	if err != nil {
 		return nil, err
 	}
@@ -54,26 +54,26 @@ func newQueueRunner(c *client.Client) (*queueRunner, error) {
 		return nil, fmt.Errorf("finding boxctl: %w", err)
 	}
 	host, _ := os.Hostname()
-	return &queueRunner{path: path, c: c, exe: exe, owner: fmt.Sprintf("%s:%d", host, os.Getpid()), launching: map[string]bool{}}, nil
+	return &backlogRunner{path: path, c: c, exe: exe, owner: fmt.Sprintf("%s:%d", host, os.Getpid()), launching: map[string]bool{}}, nil
 }
 
-// errLoopHeld: another tui or `queue run` is running the passes.
+// errLoopHeld: another tui or `backlog dispatch` is running the passes.
 type errLoopHeld struct{ holder string }
 
 func (e errLoopHeld) Error() string {
-	return "another boxctl (" + e.holder + ") is running the queue"
+	return "another boxctl (" + e.holder + ") is running the backlog"
 }
 
-// queueEvent is something a pass did or failed to do, for the tui's
-// flash or `queue run`'s output.
-type queueEvent struct {
+// backlogEvent is something a pass did or failed to do, for the tui's
+// flash or `backlog dispatch`'s output.
+type backlogEvent struct {
 	text string
 	err  bool
 }
 
 // pass observes, decides and acts once. It returns what it did.
-func (r *queueRunner) pass(ctx context.Context) ([]queueEvent, error) {
-	q, err := queue.Load(r.path)
+func (r *backlogRunner) pass(ctx context.Context) ([]backlogEvent, error) {
+	q, err := backlog.Load(r.path)
 	if err != nil {
 		return nil, err
 	}
@@ -81,22 +81,22 @@ func (r *queueRunner) pass(ctx context.Context) ([]queueEvent, error) {
 		return nil, nil
 	}
 	now := time.Now()
-	obs := queue.Obs{Now: now, PRs: map[int]*queue.PR{}}
-	var events []queueEvent
+	obs := backlog.Obs{Now: now, PRs: map[int]*backlog.PR{}}
+	var events []backlogEvent
 	listCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	vms, lerr := r.c.List(listCtx)
 	cancel()
 	if lerr != nil {
-		events = append(events, queueEvent{"listing boxes: " + lerr.Error(), true})
+		events = append(events, backlogEvent{"listing boxes: " + lerr.Error(), true})
 	} else {
-		obs.Boxes = queueBoxes(vms)
+		obs.Boxes = backlogBoxes(vms)
 	}
 	// Each active item's PR, 4 at a time.
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
 	for _, it := range q.Items {
-		if it.State != queue.Active || it.PR == 0 || it.Current() != nil {
+		if it.State != backlog.Active || it.PR == 0 || it.Current() != nil {
 			continue
 		}
 		wg.Add(1)
@@ -108,7 +108,7 @@ func (r *queueRunner) pass(ctx context.Context) ([]queueEvent, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				events = append(events, queueEvent{fmt.Sprintf("%s#%d: %v", repo, n, err), true})
+				events = append(events, backlogEvent{fmt.Sprintf("%s#%d: %v", repo, n, err), true})
 				return
 			}
 			obs.PRs[id] = pr
@@ -116,15 +116,15 @@ func (r *queueRunner) pass(ctx context.Context) ([]queueEvent, error) {
 	}
 	wg.Wait()
 
-	var acts []queue.Action
-	err = queue.Update(r.path, func(q *queue.Queue) error {
+	var acts []backlog.Action
+	err = backlog.Update(r.path, func(q *backlog.Backlog) error {
 		if holder, ok := q.Claim(r.owner, now); !ok {
 			return errLoopHeld{holder}
 		}
 		r.mu.Lock()
 		obs.Launching = maps.Clone(r.launching)
 		r.mu.Unlock()
-		acts = queue.Decide(q, obs)
+		acts = backlog.Decide(q, obs)
 		return nil
 	})
 	if err != nil {
@@ -138,14 +138,14 @@ func (r *queueRunner) pass(ctx context.Context) ([]queueEvent, error) {
 	return events, nil
 }
 
-func hasOpenItems(q *queue.Queue) bool {
-	return slices.ContainsFunc(q.Items, func(it *queue.Item) bool {
-		return it.State == queue.Queued || it.State == queue.Active
+func hasOpenItems(q *backlog.Backlog) bool {
+	return slices.ContainsFunc(q.Items, func(it *backlog.Item) bool {
+		return it.State == backlog.Queued || it.State == backlog.Active
 	})
 }
 
 // inFlight is how many launches are still running.
-func (r *queueRunner) inFlight() int {
+func (r *backlogRunner) inFlight() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.launching)
@@ -153,19 +153,19 @@ func (r *queueRunner) inFlight() int {
 
 // release gives the loop up (on exit), once launches still running
 // have recorded how they went.
-func (r *queueRunner) release() {
+func (r *backlogRunner) release() {
 	r.wg.Wait()
 	if _, err := os.Stat(r.path); err != nil {
 		return // never used: don't make the file
 	}
-	_ = queue.Update(r.path, func(q *queue.Queue) error { q.Release(r.owner); return nil })
+	_ = backlog.Update(r.path, func(q *backlog.Backlog) error { q.Release(r.owner); return nil })
 }
 
-// queueBoxes is what the engine needs of every box.
-func queueBoxes(vms []client.VM) map[string]queue.Box {
-	boxes := make(map[string]queue.Box, len(vms))
+// backlogBoxes is what the engine needs of every box.
+func backlogBoxes(vms []client.VM) map[string]backlog.Box {
+	boxes := make(map[string]backlog.Box, len(vms))
 	for _, vm := range vms {
-		b := queue.Box{State: vm.State}
+		b := backlog.Box{State: vm.State}
 		if st, err := parseGoalStatus(vm.RunStatus); err == nil && st != nil {
 			b.Status, b.PRURL, b.Branch, b.Error = st.Status, st.PRURL, st.Branch, st.Error
 		}
@@ -178,38 +178,46 @@ func queueBoxes(vms []client.VM) map[string]queue.Box {
 }
 
 // do carries one action out.
-func (r *queueRunner) do(ctx context.Context, a queue.Action) queueEvent {
+func (r *backlogRunner) do(ctx context.Context, a backlog.Action) backlogEvent {
 	switch a.Kind {
-	case queue.Launch:
+	case backlog.Launch:
 		r.launch(a)
-		return queueEvent{text: fmt.Sprintf("#%d: starting a %s run on %s", a.Item, a.Run, a.Box)}
-	case queue.RemoveBox:
+		return backlogEvent{text: fmt.Sprintf("#%d: starting a %s run on %s", a.Item, a.Run, a.Box)}
+	case backlog.RemoveBox:
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		if err := r.c.Destroy(ctx, a.Box); err != nil && !strings.Contains(err.Error(), "not found") {
-			return queueEvent{fmt.Sprintf("#%d: deleting %s: %v", a.Item, a.Box, err), true}
+		if err := destroyBox(ctx, r.c, a.Box); err != nil {
+			return backlogEvent{fmt.Sprintf("#%d: deleting %s: %v", a.Item, a.Box, err), true}
 		}
-		return queueEvent{text: fmt.Sprintf("#%d: deleted %s", a.Item, a.Box)}
-	case queue.Rerun:
+		return backlogEvent{text: fmt.Sprintf("#%d: deleted %s", a.Item, a.Box)}
+	case backlog.Rerun:
 		for _, id := range a.RunIDs {
 			if _, err := ghRun(ctx, "run", "rerun", strconv.FormatInt(id, 10), "--failed", "-R", a.Repo); err != nil {
-				return queueEvent{fmt.Sprintf("#%d: re-running %s's failed jobs: %v", a.Item, a.Repo, err), true}
+				return backlogEvent{fmt.Sprintf("#%d: re-running %s's failed jobs: %v", a.Item, a.Repo, err), true}
 			}
 		}
-		return queueEvent{text: fmt.Sprintf("#%d: re-running the failed jobs of %s#%d", a.Item, a.Repo, a.PR)}
-	case queue.UpdateBranch:
+		return backlogEvent{text: fmt.Sprintf("#%d: re-running the failed jobs of %s#%d", a.Item, a.Repo, a.PR)}
+	case backlog.UpdateBranch:
 		if _, err := ghRun(ctx, "api", "-X", "PUT", fmt.Sprintf("repos/%s/pulls/%d/update-branch", a.Repo, a.PR), "-f", "expected_head_sha="+a.SHA); err != nil {
-			return queueEvent{fmt.Sprintf("#%d: updating %s#%d's branch: %v", a.Item, a.Repo, a.PR, err), true}
+			return backlogEvent{fmt.Sprintf("#%d: updating %s#%d's branch: %v", a.Item, a.Repo, a.PR, err), true}
 		}
-		return queueEvent{text: fmt.Sprintf("#%d: updating %s#%d's branch with its base", a.Item, a.Repo, a.PR)}
+		return backlogEvent{text: fmt.Sprintf("#%d: updating %s#%d's branch with its base", a.Item, a.Repo, a.PR)}
 	}
-	return queueEvent{}
+	return backlogEvent{}
 }
 
-// queueLaunchArgs is the boxctl command line of a run, less the binary.
-func queueLaunchArgs(a queue.Action) []string {
-	args := []string{"claude", "--repo", a.Repo, "--box", a.Box, "--queue-item", strconv.Itoa(a.Item), "--goal", a.Goal}
-	if a.Run != queue.Code && a.PR != 0 {
+// destroyBox deletes a run's box; one already gone is no error.
+func destroyBox(ctx context.Context, c *client.Client, name string) error {
+	if err := c.Destroy(ctx, name); err != nil && !strings.Contains(err.Error(), "not found") {
+		return err
+	}
+	return nil
+}
+
+// backlogLaunchArgs is the boxctl command line of a run, less the binary.
+func backlogLaunchArgs(a backlog.Action) []string {
+	args := []string{"claude", "--repo", a.Repo, "--box", a.Box, "--backlog-item", strconv.Itoa(a.Item), "--goal", a.Goal}
+	if a.Run != backlog.Code && a.PR != 0 {
 		args = append(args, "--pr", strconv.Itoa(a.PR))
 	}
 	if a.Model != "" {
@@ -221,9 +229,9 @@ func queueLaunchArgs(a queue.Action) []string {
 	return args
 }
 
-// queueLogPath is where a run's boxctl claude output goes.
-func queueLogPath(queuePath, box string) string {
-	return filepath.Join(filepath.Dir(queuePath), "queue", "logs", box+".log")
+// backlogLogPath is where a run's boxctl claude output goes.
+func backlogLogPath(backlogPath, box string) string {
+	return filepath.Join(filepath.Dir(backlogPath), "backlog", "logs", box+".log")
 }
 
 // launchCommand runs a launch; a variable so tests stand in for boxctl
@@ -246,15 +254,15 @@ var launchCommand = func(exe string, args []string, logPath string) (string, err
 
 // launch starts a run's boxctl claude in the background and records how
 // it went when it returns.
-func (r *queueRunner) launch(a queue.Action) {
+func (r *backlogRunner) launch(a backlog.Action) {
 	r.mu.Lock()
 	r.launching[a.Box] = true
 	r.mu.Unlock()
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
-		out, err := launchCommand(r.exe, queueLaunchArgs(a), queueLogPath(r.path, a.Box))
-		_ = queue.Update(r.path, func(q *queue.Queue) error {
+		out, err := launchCommand(r.exe, backlogLaunchArgs(a), backlogLogPath(r.path, a.Box))
+		_ = backlog.Update(r.path, func(q *backlog.Backlog) error {
 			it := q.Item(a.Item)
 			if it == nil {
 				return nil
@@ -273,13 +281,13 @@ func (r *queueRunner) launch(a queue.Action) {
 				// boxctl said no box now: not the run's fault, so it never was.
 				it.Runs = it.Runs[:len(it.Runs)-1]
 				if len(it.Runs) == 0 && it.PR == 0 {
-					it.State = queue.Queued
+					it.State = backlog.Queued
 				}
-				q.Backoff, q.BackoffWhy = now.Add(queueBackoff), why
+				q.Backoff, q.BackoffWhy = now.Add(backlogBackoff), why
 				it.Note = "boxctl refused a box: " + why
 				return nil
 			}
-			run.Ended, run.Outcome, run.Error = &now, queue.OutcomeFailed, "starting it: "+why
+			run.Ended, run.Outcome, run.Error = &now, backlog.OutcomeFailed, "starting it: "+why
 			return nil
 		})
 		r.mu.Lock()
@@ -323,7 +331,7 @@ commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:100){nodes{
 }}}}}}}}}`
 
 // observePR asks GitHub how pull request n of repo is: one GraphQL query.
-func observePR(ctx context.Context, repo string, n int, branch string) (*queue.PR, error) {
+func observePR(ctx context.Context, repo string, n int, branch string) (*backlog.PR, error) {
 	owner, name, _ := strings.Cut(repo, "/")
 	out, err := ghRun(ctx, "api", "graphql", "-f", "query="+prQuery, "-f", "owner="+owner, "-f", "name="+name, "-F", "n="+strconv.Itoa(n), "-f", "head="+branch)
 	if err != nil && len(out) == 0 {
@@ -333,7 +341,7 @@ func observePR(ctx context.Context, repo string, n int, branch string) (*queue.P
 }
 
 // parsePR reads observePR's answer.
-func parsePR(out []byte) (*queue.PR, error) {
+func parsePR(out []byte) (*backlog.PR, error) {
 	var resp struct {
 		Data struct {
 			Repository struct {
@@ -386,7 +394,7 @@ func parsePR(out []byte) (*queue.PR, error) {
 		}
 		return nil, errors.New("no such pull request")
 	}
-	pr := &queue.PR{State: p.State, Mergeable: p.Mergeable, Head: p.HeadRefOid, Base: p.BaseRefName, Checks: "none"}
+	pr := &backlog.PR{State: p.State, Mergeable: p.Mergeable, Head: p.HeadRefOid, Base: p.BaseRefName, Checks: "none"}
 	if p.BaseRef != nil && p.BaseRef.Compare != nil {
 		pr.BehindBy = p.BaseRef.Compare.BehindBy
 	}
@@ -418,8 +426,8 @@ func parsePR(out []byte) (*queue.PR, error) {
 	return pr, nil
 }
 
-// mergeQueueItem merges it's pull request at the head CI passed on.
-func mergeQueueItem(ctx context.Context, it *queue.Item, method string) error {
+// mergeBacklogItem merges its pull request at the head CI passed on.
+func mergeBacklogItem(ctx context.Context, it *backlog.Item, method string) error {
 	if it.PR == 0 {
 		return fmt.Errorf("#%d has no pull request yet", it.ID)
 	}

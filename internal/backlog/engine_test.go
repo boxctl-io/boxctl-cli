@@ -1,4 +1,4 @@
-package queue
+package backlog
 
 import (
 	"path/filepath"
@@ -18,8 +18,8 @@ func kinds(acts []Action) []string {
 	return s
 }
 
-func newQ(n int) *Queue {
-	q := &Queue{Limits: DefaultLimits}
+func newQ(n int) *Backlog {
+	q := &Backlog{Limits: DefaultLimits}
 	for i := 0; i < n; i++ {
 		q.Add("o/r"+string(rune('a'+i)), "goal "+string(rune('a'+i)), "", 0, t0)
 	}
@@ -60,7 +60,7 @@ func TestDispatchRespectsLimits(t *testing.T) {
 }
 
 // started is an item with a launched code run on q1-code-1.
-func started(t *testing.T) *Queue {
+func started(t *testing.T) *Backlog {
 	t.Helper()
 	q := newQ(1)
 	Decide(q, Obs{Now: t0, Boxes: map[string]Box{}})
@@ -210,7 +210,7 @@ func TestSilentAndStuckRuns(t *testing.T) {
 }
 
 // withPR is an item whose code run is done with PR #7.
-func withPR(t *testing.T) (*Queue, *Item, map[string]Box) {
+func withPR(t *testing.T) (*Backlog, *Item, map[string]Box) {
 	t.Helper()
 	q := started(t)
 	boxes := map[string]Box{"q1-code-1": {State: "paused", Status: "done", PRURL: "https://github.com/o/ra/pull/7"}}
@@ -312,13 +312,13 @@ func TestBoxNameAvoidsTaken(t *testing.T) {
 }
 
 func TestUpdateAndClaim(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "queue.json")
+	path := filepath.Join(t.TempDir(), "backlog.json")
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := Update(path, func(q *Queue) error { q.Add("o/r", "g", "", 0, t0); return nil }); err != nil {
+			if err := Update(path, func(q *Backlog) error { q.Add("o/r", "g", "", 0, t0); return nil }); err != nil {
 				t.Error(err)
 			}
 		}()
@@ -343,5 +343,96 @@ func TestUpdateAndClaim(t *testing.T) {
 	q.Release("b")
 	if q.Loop != "" {
 		t.Error("not released")
+	}
+}
+
+// killedCI is item #3 with a code run done and a CI fix going on q3-ci-2,
+// then killed.
+func killedCI(t *testing.T) (*Backlog, *Item) {
+	t.Helper()
+	q := newQ(3)
+	it := q.Item(3)
+	end := t0.Add(time.Hour)
+	it.State, it.PR = Active, 7
+	it.Runs = []Run{
+		{Kind: Code, Box: "q3-code-1", Started: t0, Launched: true, Ended: &end, Outcome: OutcomeDone},
+		{Kind: CIFix, Box: "q3-ci-2", Started: end, Launched: true},
+	}
+	if err := Kill(it, "q3-ci-2", Box{}, end.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	return q, it
+}
+
+func TestKill(t *testing.T) {
+	_, it := killedCI(t)
+	r := it.Last()
+	if r.Outcome != OutcomeKilled || r.Ended == nil || it.Current() != nil {
+		t.Errorf("run = %+v", r)
+	}
+	if it.State != NeedsYou || it.Note != "run killed (ci_fix on q3-ci-2)" {
+		t.Errorf("item: %s %q", it.State, it.Note)
+	}
+	if it.Used(CIFix) != 1 {
+		t.Errorf("Used(ci_fix) = %d, want the kill charged", it.Used(CIFix))
+	}
+	// Only the run going on that box can be killed.
+	if err := Kill(it, "q3-ci-2", Box{}, t0); err == nil {
+		t.Error("killed an ended run")
+	}
+	q := newQ(1)
+	q.Items[0].Runs = []Run{{Kind: Code, Box: "q1-code-1", Started: t0}}
+	if err := Kill(q.Items[0], "q1-code-9", Box{}, t0); err == nil || q.Items[0].Current() == nil {
+		t.Errorf("wrong box: %v", err)
+	}
+}
+
+func TestKilledItemWaitsForRetry(t *testing.T) {
+	q, it := killedCI(t)
+	q.Limits = Limits{Global: 10, PerRepo: 10}
+	now := t0.Add(2 * time.Hour)
+	pr := map[int]*PR{3: {State: "OPEN", Mergeable: "MERGEABLE", Head: "abc", Base: "main", Checks: "failure"}}
+	// Its box gone: nothing ends as lost, nothing launches for #3.
+	acts := Decide(q, Obs{Now: now, Boxes: map[string]Box{}, PRs: pr})
+	for _, a := range acts {
+		if a.Item == 3 {
+			t.Errorf("box gone: %v", kinds(acts))
+		}
+	}
+	if it.State != NeedsYou || it.Last().Outcome != OutcomeKilled {
+		t.Errorf("after a pass: %s %+v", it.State, it.Last())
+	}
+	// Its box still there (deleting it failed): the pass deletes it.
+	acts = Decide(q, Obs{Now: now, Boxes: map[string]Box{"q3-ci-2": {State: "running", Status: "running"}}, PRs: pr})
+	var mine []string
+	for _, a := range acts {
+		if a.Item == 3 {
+			mine = append(mine, string(a.Kind)+":"+a.Box)
+		}
+	}
+	if strings.Join(mine, " ") != "remove_box:q3-ci-2" {
+		t.Errorf("box still there: %v", mine)
+	}
+	// A retry gives the kind one more run, and the next pass starts it.
+	it.State, it.Extra = Active, it.Extra+1
+	acts = Decide(q, Obs{Now: now, Boxes: map[string]Box{}, PRs: pr})
+	if got := kinds(acts); !strings.Contains(strings.Join(got, " "), "launch:q3-ci-3ci_fix") {
+		t.Errorf("after retry: %v", got)
+	}
+}
+
+// A kill links the pull request the box reported, as a pass would: the box
+// is about to go, and a retry without it would open a second one.
+func TestKillLinksTheBoxsPR(t *testing.T) {
+	q := newQ(1)
+	it := q.Items[0]
+	it.State = Active
+	it.Runs = []Run{{Kind: Code, Box: "q1-code-1", Started: t0, Launched: true}}
+	seen := Box{State: "running", Status: "running", PRURL: "https://github.com/o/ra/pull/12", Branch: "boxctl/x"}
+	if err := Kill(it, "q1-code-1", seen, t0); err != nil {
+		t.Fatal(err)
+	}
+	if it.PR != 12 || it.Branch != "boxctl/x" {
+		t.Errorf("PR %d, branch %q", it.PR, it.Branch)
 	}
 }

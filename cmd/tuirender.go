@@ -220,8 +220,8 @@ func (m tuiModel) infoBlock() []string {
 		status = m.spin.View() + " " + refreshed
 	}
 	showing := kv("Showing", m.stateFilter.String())
-	if t := m.top(); t.kind == pageTable && t.view == queueView {
-		showing = kv("Queue", m.queueSummary())
+	if t := m.top(); t.kind == pageTable && (t.view == backlogView || t.view == runsView) {
+		showing = kv("Backlog", m.backlogSummary())
 	}
 	return []string{
 		kv("API", host),
@@ -328,6 +328,9 @@ func (m tuiModel) table(w, inner int) (string, []string) {
 	t := m.top()
 	rows := m.rows()
 	title := k9s.title.Render(t.view.title)
+	if t.item != 0 {
+		title += k9s.title.Render(fmt.Sprintf("(#%d)", t.item))
+	}
 	if t.view == boxesView {
 		title += k9s.title.Render("(" + m.stateFilter.String() + ")")
 	}
@@ -589,6 +592,9 @@ func (m tuiModel) crumbsView() string {
 		name := p.title
 		if p.kind == pageTable {
 			name = p.view.name
+			if p.item != 0 {
+				name += fmt.Sprintf("(#%d)", p.item)
+			}
 		}
 		style := k9s.crumb
 		if i == len(m.pages)-1 {

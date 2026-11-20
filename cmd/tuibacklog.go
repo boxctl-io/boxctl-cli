@@ -8,46 +8,45 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boxctl-io/boxctl-cli/internal/queue"
+	"github.com/boxctl-io/boxctl-cli/internal/backlog"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// `:queue`: boxctl queue in the tui. The rows are ~/.boxctl/queue.json,
-// read again on every refresh; the passes that move it (queuerun.go) run
-// every queuePassEvery while the tui is open, whatever view is shown --
-// the tui is the queue's loop unless `boxctl queue run` already is.
+// `:backlog`: boxctl backlog in the tui. The rows are ~/.boxctl/backlog.json,
+// read again on every refresh; the passes that move it (backlogdispatch.go) run
+// every backlogPassEvery while the tui is open, whatever view is shown --
+// the tui is the backlog's loop unless `boxctl backlog dispatch` already is.
 
 type (
-	tuiQueuePassMsg struct {
-		events []queueEvent
+	tuiBacklogPassMsg struct {
+		events []backlogEvent
 		err    error
 	}
-	tuiQueueDoneMsg struct { // a key's change to the queue was made
+	tuiBacklogDoneMsg struct { // a key's change to the backlog was made
 		text string
 		err  error
 	}
 )
 
-var queueView = &tableView{
-	name:     "queue",
-	aliases:  []string{"q", "goals", "work"},
-	title:    "Queue",
-	resource: "queue",
+var backlogView = &tableView{
+	name:     "backlog",
+	title:    "Backlog",
+	resource: "backlog",
 	columns:  []column{{"ID", 'I'}, {"PRI", 'P'}, {"REPO", 'R'}, {"STATE", 'S'}, {"RUN", 0}, {"PR", 0}, {"NOTE", 'N'}, {"GOAL", 'G'}},
 	stateCol: 3,
 	empty:    "Nothing queued: a queues a goal (here, or on a repository in :repos).",
-	hotkeys: []hotkey{{"a", "queue a goal"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"L", "slot limit"}, {"o", "open PR"},
-		{"l", "run's log"}, {"s", "run's shell"}, {"ctrl-d", "cancel"}, {"d", "describe"}},
+	hotkeys: []hotkey{{"a", "add a goal"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"L", "slot limit"}, {"o", "open PR"},
+		{"l", "run's log"}, {"s", "run's shell"}, {"ctrl-d", "cancel"}, {"enter", "runs"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
-		if m.queue == nil {
+		if m.backlog == nil {
 			return nil
 		}
 		var rows []tableRow
-		for i, it := range m.queue.Sorted() {
+		for i, it := range m.backlog.Sorted() {
 			rows = append(rows, tableRow{
 				key:      strconv.Itoa(it.ID),
-				state:    queueStateText(it.State),
-				cells:    []string{strconv.Itoa(it.ID), strconv.Itoa(it.Priority), it.Repo, queueStateText(it.State), queueRunText(it), queuePRText(it), orDash(it.Note), firstLine(it.Goal)},
+				state:    backlogStateText(it.State),
+				cells:    []string{strconv.Itoa(it.ID), strconv.Itoa(it.Priority), it.Repo, backlogStateText(it.State), backlogRunText(it), backlogPRText(it), orDash(it.Note), firstLine(it.Goal)},
 				sortKeys: []string{fmt.Sprintf("%08d", it.ID), fmt.Sprintf("%08d", 1<<20-it.Priority), "", fmt.Sprintf("%04d", i)},
 			})
 		}
@@ -55,82 +54,82 @@ var queueView = &tableView{
 	},
 }
 
-// queueStateText is the STATE cell, which the table colours: "needs you"
+// backlogStateText is the STATE cell, which the table colours: "needs you"
 // as an error, done as finished.
-func queueStateText(s queue.State) string {
+func backlogStateText(s backlog.State) string {
 	return strings.ReplaceAll(string(s), "_", " ")
 }
 
-// loadQueueMsg reads the queue file for the view.
-func loadQueueMsg() tea.Msg {
-	q, err := loadQueue()
-	return tuiListMsg{resource: "queue", queue: q, err: err}
+// loadBacklogMsg reads the backlog file for the view.
+func loadBacklogMsg() tea.Msg {
+	q, err := loadBacklog()
+	return tuiListMsg{resource: "backlog", backlog: q, err: err}
 }
 
-// setQueueNote shows note on item id in the table at once, while the
+// setBacklogNote shows note on item id in the table at once, while the
 // change it describes is still being made; the reload that follows
-// replaces it with what the queue file says.
-func (m *tuiModel) setQueueNote(id int, note string) {
-	if m.queue == nil {
+// replaces it with what the backlog file says.
+func (m *tuiModel) setBacklogNote(id int, note string) {
+	if m.backlog == nil {
 		return
 	}
-	if it := m.queue.Item(id); it != nil {
+	if it := m.backlog.Item(id); it != nil {
 		it.Note = note
 	}
 }
 
-// queuePass runs one pass in the background, unless the tui has no runner
+// backlogPass runs one pass in the background, unless the tui has no runner
 // (tests). With one going already, another follows it as soon as it ends:
 // the running one may have read GitHub before the change that asked.
-func (m *tuiModel) queuePass() tea.Cmd {
+func (m *tuiModel) backlogPass() tea.Cmd {
 	if m.qr == nil {
 		return nil
 	}
-	if m.queuePassing {
-		m.queuePassAgain = true
+	if m.backlogPassing {
+		m.backlogPassAgain = true
 		return nil
 	}
-	m.queuePassing = true
+	m.backlogPassing = true
 	r := m.qr
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		events, err := r.pass(ctx)
-		return tuiQueuePassMsg{events: events, err: err}
+		return tuiBacklogPassMsg{events: events, err: err}
 	}
 }
 
-// queuePassed shows what a pass did (its last event, or its error) and
-// reloads the queue.
-func (m *tuiModel) queuePassed(msg tuiQueuePassMsg) tea.Cmd {
-	m.queuePassing = false
-	m.queuePassAt = time.Now()
+// backlogPassed shows what a pass did (its last event, or its error) and
+// reloads the backlog.
+func (m *tuiModel) backlogPassed(msg tuiBacklogPassMsg) tea.Cmd {
+	m.backlogPassing = false
+	m.backlogPassAt = time.Now()
 	var held errLoopHeld
-	m.queueHeld = ""
-	cmds := []tea.Cmd{loadQueueMsg}
-	if m.queuePassAgain {
-		m.queuePassAgain = false
-		cmds = append(cmds, m.queuePass())
+	m.backlogHeld = ""
+	cmds := []tea.Cmd{loadBacklogMsg}
+	if m.backlogPassAgain {
+		m.backlogPassAgain = false
+		cmds = append(cmds, m.backlogPass())
 	}
 	switch {
 	case errors.As(msg.err, &held):
-		m.queueHeld = held.holder
+		m.backlogHeld = held.holder
 	case msg.err != nil:
-		cmds = append(cmds, m.fail("queue: %v", msg.err))
+		cmds = append(cmds, m.fail("backlog: %v", msg.err))
 	case len(msg.events) > 0:
 		e := msg.events[len(msg.events)-1]
 		if e.err {
-			cmds = append(cmds, m.fail("queue %s", e.text))
+			cmds = append(cmds, m.fail("backlog %s", e.text))
 		} else {
-			cmds = append(cmds, m.say("queue %s", e.text))
+			cmds = append(cmds, m.say("backlog %s", e.text))
 		}
 	}
 	return tea.Batch(cmds...)
 }
 
-// queueItem is the item under the cursor in :queue.
-func (m *tuiModel) queueItem() *queue.Item {
-	if m.queue == nil || m.top().view != queueView {
+// backlogItem is the item under the cursor in :backlog.
+func (m *tuiModel) backlogItem() *backlog.Item {
+	if m.backlog == nil || m.top().view != backlogView {
 		return nil
 	}
 	r := m.currentRow()
@@ -138,33 +137,38 @@ func (m *tuiModel) queueItem() *queue.Item {
 		return nil
 	}
 	id, _ := strconv.Atoi(r.key)
-	return m.queue.Item(id)
+	return m.backlog.Item(id)
 }
 
-// queueChange runs fn on the queue in the background, then flashes text
+// backlogChange runs fn on the backlog in the background, then flashes text
 // and reloads it -- and runs a pass, so the change takes effect now.
-func (m *tuiModel) queueChange(text string, fn func() error) tea.Cmd {
+func (m *tuiModel) backlogChange(text string, fn func() error) tea.Cmd {
 	return func() tea.Msg {
 		if err := fn(); err != nil {
-			return tuiQueueDoneMsg{err: err}
+			return tuiBacklogDoneMsg{err: err}
 		}
-		return tuiQueueDoneMsg{text: text}
+		return tuiBacklogDoneMsg{text: text}
 	}
 }
 
-// handleQueueKey is :queue's own keys; handled says whether key was one.
-func (m tuiModel) handleQueueKey(key string) (tea.Model, tea.Cmd, bool) {
-	it := m.queueItem()
+// handleBacklogKey is :backlog's own keys; handled says whether key was one.
+func (m tuiModel) handleBacklogKey(key string) (tea.Model, tea.Cmd, bool) {
+	it := m.backlogItem()
 	switch key {
 	case "a":
-		md, cmd := m.askQueueRepo()
+		md, cmd := m.askBacklogRepo()
 		return md, cmd, true
 	case "L":
-		md, cmd := m.askQueueLimit()
+		md, cmd := m.askBacklogLimit()
 		return md, cmd, true
-	case "enter", "d":
+	case "enter":
 		if it != nil {
-			m.push(page{kind: pageText, title: fmt.Sprintf("#%d", it.ID), lines: describeQueueItem(it)})
+			m.openRuns(it.ID)
+		}
+		return m, nil, true
+	case "d":
+		if it != nil {
+			m.push(page{kind: pageText, title: fmt.Sprintf("#%d", it.ID), lines: describeBacklogItem(it)})
 		}
 		return m, nil, true
 	case "y":
@@ -190,32 +194,32 @@ func (m tuiModel) handleQueueKey(key string) (tea.Model, tea.Cmd, bool) {
 		m.ask(fmt.Sprintf("Merge %s#%d?", item.Repo, item.PR), []string{
 			fmt.Sprintf("Squash-merges it at %s, the commit CI passed on; GitHub refuses if the branch moved since.", short),
 		}, func(m tuiModel) (tea.Model, tea.Cmd) {
-			m.setQueueNote(id, "merging")
-			return m, tea.Batch(m.say("merging %s#%d...", item.Repo, item.PR), m.queueChange(fmt.Sprintf("merged %s#%d", item.Repo, item.PR), func() error {
-				ctx, cancel := queueCtx()
+			m.setBacklogNote(id, "merging")
+			return m, tea.Batch(m.say("merging %s#%d...", item.Repo, item.PR), m.backlogChange(fmt.Sprintf("merged %s#%d", item.Repo, item.PR), func() error {
+				ctx, cancel := backlogCtx()
 				defer cancel()
-				if err := mergeQueueItem(ctx, &item, "squash"); err != nil {
+				if err := mergeBacklogItem(ctx, &item, "squash"); err != nil {
 					return err
 				}
-				return markQueueMerged(id)
+				return markBacklogMerged(id)
 			}))
 		})
 		return m, nil, true
 	case "r":
-		return m, m.queueChange(fmt.Sprintf("#%d is active again", id), func() error { return retryQueueItem(id) }), true
+		return m, m.backlogChange(fmt.Sprintf("#%d is active again", id), func() error { return retryBacklogItem(id) }), true
 	case "+", "-":
 		d := 1
 		if key == "-" {
 			d = -1
 		}
-		return m, m.queueChange(fmt.Sprintf("#%d's priority changed", id), func() error {
-			return changeQueueItem(id, func(it *queue.Item) error { it.Priority += d; return nil })
+		return m, m.backlogChange(fmt.Sprintf("#%d's priority changed", id), func() error {
+			return changeBacklogItem(id, func(it *backlog.Item) error { it.Priority += d; return nil })
 		}), true
 	case "ctrl+d":
 		m.ask(fmt.Sprintf("Cancel #%d?", id), []string{
 			"Its boxes are deleted; its branch and pull request, if any, stay on GitHub.",
 		}, func(m tuiModel) (tea.Model, tea.Cmd) {
-			return m, m.queueChange(fmt.Sprintf("cancelled #%d", id), func() error { return cancelQueueItem(id) })
+			return m, m.backlogChange(fmt.Sprintf("cancelled #%d", id), func() error { return cancelBacklogItem(id) })
 		})
 		return m, nil, true
 	case "o":
@@ -226,7 +230,7 @@ func (m tuiModel) handleQueueKey(key string) (tea.Model, tea.Cmd, bool) {
 		return m, func() tea.Msg {
 			err := openPR(repo, pr)
 			if err != nil {
-				return tuiQueueDoneMsg{err: fmt.Errorf("opening %s#%d: %v", repo, pr, err)}
+				return tuiBacklogDoneMsg{err: fmt.Errorf("opening %s#%d: %v", repo, pr, err)}
 			}
 			return nil
 		}, true
@@ -248,11 +252,11 @@ func (m tuiModel) handleQueueKey(key string) (tea.Model, tea.Cmd, bool) {
 	return m, nil, false
 }
 
-// askQueueRepo asks which repository a new goal is for -- from a list
+// askBacklogRepo asks which repository a new goal is for -- from a list
 // that starts at the current item's, so enter alone takes that -- then
 // the goal.
-func (m tuiModel) askQueueRepo() (tea.Model, tea.Cmd) {
-	cmd := m.prompt("Queue a goal: which repository?", []string{
+func (m tuiModel) askBacklogRepo() (tea.Model, tea.Cmd) {
+	cmd := m.prompt("Add a goal: which repository?", []string{
 		"owner/name; the goal is asked next. Type to narrow the list,",
 		"up/down to select, tab to complete.",
 	}, "owner/name", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
@@ -260,20 +264,20 @@ func (m tuiModel) askQueueRepo() (tea.Model, tea.Cmd) {
 		if err != nil {
 			return m, m.fail("%v", err)
 		}
-		return m.askQueueGoal(owner + "/" + name)
+		return m.askBacklogGoal(owner + "/" + name)
 	})
 	if m.dialog != nil && m.dialog.input != nil {
-		m.dialog.choices = queueRepoChoices
+		m.dialog.choices = backlogRepoChoices
 	}
 	// The repositories :repos lists: the cache at once, GitHub when it's
 	// stale -- the list fills in when that answers.
 	return m, tea.Batch(cmd, m.listRepos(false), m.spinIfBusy())
 }
 
-// queueRepoChoices are the repositories the queue's `a` offers: the
+// backlogRepoChoices are the repositories the backlog's `a` offers: the
 // current item's, the others already queued (newest item first), then
 // the ones :repos lists.
-func queueRepoChoices(m *tuiModel) []string {
+func backlogRepoChoices(m *tuiModel) []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(r string) {
@@ -282,12 +286,12 @@ func queueRepoChoices(m *tuiModel) []string {
 			out = append(out, r)
 		}
 	}
-	if it := m.queueItem(); it != nil {
+	if it := m.backlogItem(); it != nil {
 		add(it.Repo)
 	}
-	if m.queue != nil {
-		for i := len(m.queue.Items) - 1; i >= 0; i-- {
-			add(m.queue.Items[i].Repo)
+	if m.backlog != nil {
+		for i := len(m.backlog.Items) - 1; i >= 0; i-- {
+			add(m.backlog.Items[i].Repo)
 		}
 	}
 	for _, r := range m.repos {
@@ -296,35 +300,35 @@ func queueRepoChoices(m *tuiModel) []string {
 	return out
 }
 
-// askQueueLimit asks for the queue's slot limit: how many runs go at
+// askBacklogLimit asks for the backlog's slot limit: how many runs go at
 // once in all, and optionally on one repository ("3", or "3 2").
-func (m tuiModel) askQueueLimit() (tea.Model, tea.Cmd) {
-	cur := queue.DefaultLimits
-	if m.queue != nil {
-		cur = m.queue.Limits
+func (m tuiModel) askBacklogLimit() (tea.Model, tea.Cmd) {
+	cur := backlog.DefaultLimits
+	if m.backlog != nil {
+		cur = m.backlog.Limits
 	}
 	cmd := m.prompt("Slot limit", []string{
 		fmt.Sprintf("Now %d runs at once, %d per repository. Each run is a box of yours.", cur.Global, cur.PerRepo),
 		"Type how many in all, optionally then how many per repository: 3, or 3 2.",
 	}, fmt.Sprintf("%d %d", cur.Global, cur.PerRepo), func(m tuiModel, value string) (tea.Model, tea.Cmd) {
-		global, perRepo, err := parseQueueLimit(value)
+		global, perRepo, err := parseBacklogLimit(value)
 		if err != nil {
 			return m, m.fail("%v", err)
 		}
 		return m, func() tea.Msg {
-			l, err := setQueueLimits(&global, perRepo)
+			l, err := setBacklogLimits(&global, perRepo)
 			if err != nil {
-				return tuiQueueDoneMsg{err: err}
+				return tuiBacklogDoneMsg{err: err}
 			}
-			return tuiQueueDoneMsg{text: fmt.Sprintf("slot limit: %d at once, %d per repository", l.Global, l.PerRepo)}
+			return tuiBacklogDoneMsg{text: fmt.Sprintf("slot limit: %d at once, %d per repository", l.Global, l.PerRepo)}
 		}
 	})
 	return m, cmd
 }
 
-// parseQueueLimit reads L's answer: the global limit, then optionally the
+// parseBacklogLimit reads L's answer: the global limit, then optionally the
 // per-repository one (nil when not given), separated by a space or "/".
-func parseQueueLimit(s string) (int, *int, error) {
+func parseBacklogLimit(s string) (int, *int, error) {
 	f := strings.FieldsFunc(s, func(r rune) bool { return r == ' ' || r == '/' || r == ',' || r == '\t' })
 	if len(f) < 1 || len(f) > 2 {
 		return 0, nil, errors.New("a slot limit is a number, or two: in all, per repository")
@@ -343,35 +347,35 @@ func parseQueueLimit(s string) (int, *int, error) {
 	return n[0], &n[1], nil
 }
 
-// askQueueGoal asks for a goal on repo and queues it.
-func (m tuiModel) askQueueGoal(repo string) (tea.Model, tea.Cmd) {
-	cmd := m.promptText("Queue a goal on "+repo, []string{
+// askBacklogGoal asks for a goal on repo and adds it to the backlog.
+func (m tuiModel) askBacklogGoal(repo string) (tea.Model, tea.Cmd) {
+	cmd := m.promptText("Add a goal on "+repo, []string{
 		"It runs unattended (boxctl claude --goal) when a slot is free, and ends in a pull request",
-		"that :queue then watches: CI and conflicts get follow-up runs; m merges it once it's green.",
+		"that :backlog then watches: CI and conflicts get follow-up runs; m merges it once it's green.",
 	}, "what to do, e.g. bump Go and fix what breaks", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		if value == "" {
 			return m, m.fail("a goal is needed")
 		}
-		return m, m.queueChange("queued a goal on "+repo, func() error {
-			_, err := addQueueItem(repo, value, "", 0)
+		return m, m.backlogChange("queued a goal on "+repo, func() error {
+			_, err := addBacklogItem(repo, value, "", 0)
 			return err
 		})
 	})
 	return m, cmd
 }
 
-// describeQueueItem is :queue's describe page.
-func describeQueueItem(it *queue.Item) []string {
+// describeBacklogItem is :backlog's describe page.
+func describeBacklogItem(it *backlog.Item) []string {
 	kv := func(k, v string) string { return fmt.Sprintf("%-12s%s", k+":", v) }
 	lines := []string{
 		kv("Item", "#"+strconv.Itoa(it.ID)),
 		kv("Repo", it.Repo),
-		kv("State", queueStateText(it.State)),
+		kv("State", backlogStateText(it.State)),
 		kv("Note", orDash(it.Note)),
 		kv("Priority", strconv.Itoa(it.Priority)),
 		kv("Branch", orDash(it.Branch)),
-		kv("PR", queuePRText(it)),
-		kv("Budget", fmt.Sprintf("%d runs of each kind (code %d, ci_fix %d, conflict_fix %d used)", it.Budget(), it.Used(queue.Code), it.Used(queue.CIFix), it.Used(queue.ConflictFix))),
+		kv("PR", backlogPRText(it)),
+		kv("Budget", fmt.Sprintf("%d runs of each kind (code %d, ci_fix %d, conflict_fix %d used)", it.Budget(), it.Used(backlog.Code), it.Used(backlog.CIFix), it.Used(backlog.ConflictFix))),
 	}
 	if it.Model != "" {
 		lines = append(lines, kv("Model", it.Model))
@@ -397,28 +401,28 @@ func describeQueueItem(it *queue.Item) []string {
 	return lines
 }
 
-// queueSummary is the header's Queue line in :queue: how many items run,
-// wait and need you, against the limit -- or who runs the queue instead.
-func (m tuiModel) queueSummary() string {
-	if m.queueHeld != "" {
-		return "run by " + m.queueHeld
+// backlogSummary is the header's Backlog line in :backlog: how many items run,
+// wait and need you, against the limit -- or who runs the backlog instead.
+func (m tuiModel) backlogSummary() string {
+	if m.backlogHeld != "" {
+		return "run by " + m.backlogHeld
 	}
-	if m.queue == nil {
+	if m.backlog == nil {
 		return "-"
 	}
 	running, queued, needs := 0, 0, 0
-	for _, it := range m.queue.Items {
+	for _, it := range m.backlog.Items {
 		switch {
 		case it.Current() != nil:
 			running++
-		case it.State == queue.Queued:
+		case it.State == backlog.Queued:
 			queued++
-		case it.State == queue.NeedsYou:
+		case it.State == backlog.NeedsYou:
 			needs++
 		}
 	}
-	s := fmt.Sprintf("%d/%d running, %d queued, %d need you", running, m.queue.Limits.Global, queued, needs)
-	if time.Now().Before(m.queue.Backoff) {
+	s := fmt.Sprintf("%d/%d running, %d queued, %d need you", running, m.backlog.Limits.Global, queued, needs)
+	if time.Now().Before(m.backlog.Backoff) {
 		s += ", boxctl refused a box"
 	}
 	return s

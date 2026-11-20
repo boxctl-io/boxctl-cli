@@ -167,7 +167,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `k9s` holds the colours. A text page's lines are wrapped to the
   width at render time (`textLines`/`wrapLines`: continuations under a
   `Key:   value` line's value), and scrolling counts the wrapped lines,
-  so a long queue goal or note reads in full. A terminal is `boxctl ssh <name>` run as a
+  so a long backlog goal or note reads in full. A terminal is `boxctl ssh <name>` run as a
   child process through `tea.ExecProcess` -- in-process `runSSH` would
   leave its uncancellable stdin reader behind to eat the next keypress
   -- with `--api-url` passed on and its stderr captured for the flash.
@@ -436,42 +436,65 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   harness's deny rules still hold under the flag is not verified.
 - `cmd/claudepr.go` — `claude --repo R --pr N [--goal ...]`: a run on
   an open pull request's branch instead of a new one (the follow-up
-  `:queue` starts for a CI or conflict fix). `prBranch` asks GitHub for
+  `:backlog` starts for a CI or conflict fix). `prBranch` asks GitHub for
   the head branch before any box and refuses a closed PR or a fork's
   branch; `cloneBranchScript` clones it and fetches every branch (so
   `origin/<default>` is there to merge); `prGoalPrompt` says push to it,
   never force-push, open no new PR. The runner is unchanged: its `gh pr
   list --head` finds the existing PR, so a goal still ends `done`.
-- `internal/queue/`, `cmd/queue.go`, `cmd/queuerun.go`, `cmd/tuiqueue.go`
-  — `boxctl queue` and the tui's `:queue`: the boxctl-orchestrator design
+- `internal/backlog/`, `cmd/backlog.go`, `cmd/backlogdispatch.go`,
+  `cmd/tuibacklog.go`, `cmd/runs.go`, `cmd/tuiruns.go` — `boxctl backlog`
+  and the tui's `:backlog` (the goals), `boxctl runs` and `:runs` (every
+  run of every goal, going and ended): the boxctl-orchestrator design
   (boxctl-orchestrator's `docs/designs/boxctl_orchestrator.md`) built into
   the CLI on top of goal runs, instead of its own runner, SQLite and
-  harness. `internal/queue` is the state (`~/.boxctl/queue.json`, written
-  only through `Update`, which holds `queue.json.lock`) and `Decide`, the
+  harness. It was `boxctl queue`/`:queue` until the split; there is no
+  alias. `internal/backlog` is the state (`~/.boxctl/backlog.json`, written
+  only through `Update`, which holds `backlog.json.lock`) and `Decide`, the
   pure engine: one pass's observations (every box's `run_status` from one
   `List`, each PR from one GraphQL query) in, state changes made and
-  actions out -- tested as tables, keep it free of I/O. `queuerun.go` is
+  actions out -- tested as tables, keep it free of I/O. `migrate.go`
+  moves an older `queue.json` and `queue/` logs over on first use, and
+  refuses while an older boxctl still holds that file's loop claim or
+  lock (two loops on two files would launch everything twice), and
+  leaves `queue.json` as a JSON string an older boxctl fails to read (an
+  idle old tui doesn't hold the loop, and would otherwise start an empty
+  queue there); the
+  `queued` item state and the `q<id>-` box names kept their old words.
+  `backlogdispatch.go` is
   the I/O: a run is `boxctl claude --repo R --box q<id>-<kind>-<n>
-  --queue-item <id> --goal ...` (`--pr N` for a follow-up) run as a child
-  process, output in `~/.boxctl/queue/logs/`, and `launching` is what
+  --backlog-item <id> --goal ...` (`--pr N` for a follow-up) run as a child
+  process, output in `~/.boxctl/backlog/logs/`, and `launching` is what
   keeps a pass from calling a run still being set up lost. A refusal
   (`isRefusal` matches `internal/client`'s `refusalMessage` text) drops
   the run uncharged and backs off. The passes run in the tui every
-  `queuePassEvery` (any view) or in `boxctl queue run`; `Queue.Claim`
-  keeps it to one loop. A merge here (`queue merge`, the tui's `m`)
-  marks the item done itself (`markQueueMerged`) instead of waiting for a
-  pass to see the PR merged, and a tui key's pass asked for while one is
-  running follows it at once (`queuePassAgain`), not 30s later. Follow-up prompts are `queue.GoalFor`. `:queue`'s
-  `a` asks for the repository from a list (`queueRepoChoices`: the current
+  `backlogPassEvery` (any view) or in `boxctl backlog dispatch`;
+  `Backlog.Claim` keeps it to one loop. A merge here (`backlog merge`,
+  the tui's `m`) marks the item done itself (`markBacklogMerged`) instead
+  of waiting for a pass to see the PR merged, and a tui key's pass asked
+  for while one is running follows it at once (`backlogPassAgain`), not
+  30s later. Follow-up prompts are `backlog.GoalFor`. A kill (ctrl-d in
+  `:runs`) is `backlog.Kill` under `Update` first -- outcome `killed`,
+  charged like a failure, the item needs-you, any pull request the box
+  reported linked as a pass would -- and only then
+  `Client.Destroy`: the other order lets a pass see the box gone while
+  the run is current, call it lost and relaunch it. `Decide` deletes a
+  killed run's box on every pass while it's listed, so a failed delete
+  is retried. `runs.go`'s `backlogRuns` are the rows of both `boxctl runs`
+  and `:runs` (going first, then newest; a run going with no box is
+  `starting` before `Launched`, `gone` after); `page.item` scopes `:runs`
+  to one item (enter on it in `:backlog`). In `:runs`, `s`/`l` work on any
+  run whose box is listed, ended ones included. `:backlog`'s
+  `a` asks for the repository from a list (`backlogRepoChoices`: the current
   item's, the queued ones, then `:repos`' cache, loaded through
   `listRepos`): a prompt with `tuiDialog.choices` shows the matches under
   its input (`matches`: prefix, then name-after-owner prefix, then
   substring), up/down selects, tab completes, and enter takes the
   selection unless an owner/name was typed (`tuiDialog.value`).
-  `:queue`'s `L` sets the slot limit (`queue limit`'s `setQueueLimits`):
-  `3` for runs at once in all, `3 2` for per repository too
-  (`parseQueueLimit`).
-  `:queue`'s `o` is `cmd/prtab.go`'s `openPR`: on a Mac with Chrome
+  `:backlog`'s and `:runs`' `L` sets the slot limit (`backlog limit`'s
+  `setBacklogLimits`): `3` for runs at once in all, `3 2` for per
+  repository too (`parseBacklogLimit`).
+  `:backlog`'s `o` is `cmd/prtab.go`'s `openPR`: on a Mac with Chrome
   running, an AppleScript loads the PR into the one tab it used last
   (its Chrome id in `~/.boxctl/pr-tab`, reused only while still on
   github.com) instead of a new tab; otherwise `gh pr view --web`.

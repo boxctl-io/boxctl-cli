@@ -19,7 +19,7 @@ boxctl rm my-box                            # done
 ## Contents
 
 - [Install](#install) · [Usage](#usage)
-- [Claude Code on a box](#claude-code-on-a-box-boxctl-claude) · [The queue](#the-queue-boxctl-queue) · [Kilo on a box](#kilo-on-a-box-boxctl-kilo)
+- [Claude Code on a box](#claude-code-on-a-box-boxctl-claude) · [The backlog](#the-backlog-boxctl-backlog) · [Kilo on a box](#kilo-on-a-box-boxctl-kilo)
 - [Real ssh](#real-ssh-ssh-proxy) · [Claude Code plugin](#claude-code-plugin)
 - [Auth](#how-auth-works) · [Security](#security--credentials)
 - [`ssh`](#ssh--terminal-protocol) · [`port-forward`](#port-forward) · [`expose`](#expose)
@@ -31,14 +31,15 @@ boxctl rm my-box                            # done
 |---|---|
 | `login` / `logout` | Save or forget your personal token |
 | `create`, `ls`, `rm`, `pause`, `resume`, `keep` | Box lifecycle (`rm`/`pause`/`resume` also take `all`) |
-| `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`, `:repos` (your GitHub repos, newest push first; enter starts `claude --repo` on one, `g` a `--goal` run, `a` queues one), `:queue`; `/` to filter |
+| `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`, `:repos` (your GitHub repos, newest push first; enter starts `claude --repo` on one, `g` a `--goal` run, `a` adds one to the backlog), `:backlog`, `:runs`; `/` to filter |
 | `images`, `sizes` | What you can boot, and at what size |
 | `ssh`, `ssh-proxy` | Shell or one-off command; real `ssh`/`scp`/`rsync` through a proxy |
 | `cp` | Copy a file or directory (`-r`) between a box and this machine, any size |
 | `port-forward`, `expose`, `unexpose` | Reach a box port locally, or publish it on the internet |
 | `backups`, `restore` | Saved copies of paused boxes |
 | `claude`, `kilo` | Run a coding agent on a box with your project |
-| `queue` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:queue` in the tui) |
+| `backlog` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:backlog` in the tui) |
+| `runs` | Every run of every backlog item, going and ended (`:runs` in the tui) |
 
 Run `boxctl <command> --help` for flags.
 
@@ -467,11 +468,11 @@ It all runs over real ssh to the box's sshd, as root, with the key in
 `~/.boxctl/claude/id_ed25519` (authorized on the box over `boxctl ssh`),
 tunneled by `boxctl ssh-proxy`.
 
-## The queue (`boxctl queue`)
+## The backlog (`boxctl backlog`)
 
-A queue of goals, each ending in one pull request, worked on a few at a
+A backlog of goals, each ending in one pull request, worked on a few at a
 time by unattended `boxctl claude --goal` runs, each on a box of its own.
-Once a goal has its pull request, the queue watches it until you merge it:
+Once a goal has its pull request, the backlog watches it until you merge it:
 
 - **CI fails:** the failed GitHub Actions jobs are re-run once (a flake
   costs nothing more). If they fail again on the same commit, a
@@ -481,17 +482,18 @@ Once a goal has its pull request, the queue watches it until you merge it:
   (`git merge`, never a rebase or force-push) and resolves it.
 - **It's behind its base:** GitHub is asked to update the branch, and
   it's ready again only once CI passes on the result.
-- **Green and up to date:** "ready to merge". `boxctl queue merge <id>`
-  (or `m` in `:queue`) merges it at the commit CI passed on
+- **Green and up to date:** "ready to merge". `boxctl backlog merge <id>`
+  (or `m` in `:backlog`) merges it at the commit CI passed on
   (`--match-head-commit`). Nothing is merged without you.
 
 ```bash
-boxctl queue add --repo owner/name "bump Go to 1.26 and fix what breaks"
-boxctl queue add -p 5 "add --json to ls"     # this directory's repo; higher priority starts first
-boxctl queue                                 # ID, state, run, PR, what it's waiting for
-boxctl queue limit --global 4 --per-repo 2   # runs at once (default 2: an account's box limit)
-boxctl queue merge 3 ; boxctl queue cancel 4 ; boxctl queue retry 5
-boxctl queue run                             # run the passes here with no screen
+boxctl backlog add --repo owner/name "bump Go to 1.26 and fix what breaks"
+boxctl backlog add -p 5 "add --json to ls"     # this directory's repo; higher priority starts first
+boxctl backlog                                 # ID, state, run, PR, what it's waiting for
+boxctl runs                                    # every run: item, kind, box, how it's going or ended
+boxctl backlog limit --global 4 --per-repo 2   # runs at once (default 2: an account's box limit)
+boxctl backlog merge 3 ; boxctl backlog cancel 4 ; boxctl backlog retry 5
+boxctl backlog dispatch                        # run the passes here with no screen
 ```
 
 Each kind of run (`code`, `ci_fix`, `conflict_fix`) gets 2 attempts per
@@ -501,11 +503,28 @@ A goal's boxes are deleted when its next run starts, and when it's merged
 or cancelled. A refused box (your account's limit, a full fleet) costs
 nothing; new runs wait 2 minutes.
 
+In the tui, `:backlog` is the goals and `:runs` the runs, going and
+ended; enter on a goal shows its runs. In `:runs`, `s` and `l` open a
+run's shell and log while its box is there, and ctrl-d kills a run
+that's going: its box is deleted and the goal waits for you (it counts
+as one of that kind's attempts), with nothing more started for it until
+`r` retries it.
+
 Nothing moves unless something runs the passes, every 30s: `boxctl tui`
-does while it's open, whatever view you're in, and `boxctl queue run`
-does with no screen. Only one runs them at a time. Runs already on boxes
-carry on while neither is open. The queue lives in `~/.boxctl/queue.json`;
-each run's `boxctl claude` output is in `~/.boxctl/queue/logs/<box>.log`.
+does while it's open, whatever view you're in, and `boxctl backlog
+dispatch` does with no screen. Only one runs them at a time. Runs
+already on boxes carry on while neither is open. The backlog lives in
+`~/.boxctl/backlog.json`; each run's `boxctl claude` output is in
+`~/.boxctl/backlog/logs/<box>.log`. Run boxes are still named
+`q<id>-<kind>-<n>`.
+
+Upgrading from a boxctl that had `boxctl queue`: the first backlog
+command moves `~/.boxctl/queue.json` and its logs over, runs in progress
+included. Close the older boxctl's tui or `boxctl queue run` first; the
+move waits until neither holds the old file, and leaves a note in
+`queue.json` that an older boxctl fails on rather than starting an empty
+queue there.
+
 It's the boxctl-orchestrator design (boxctl-orchestrator's
 `docs/designs/boxctl_orchestrator.md`), built into the CLI on top of goal
 runs.

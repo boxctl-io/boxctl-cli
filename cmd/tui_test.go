@@ -744,17 +744,17 @@ func TestBareRootHelpOffTerminal(t *testing.T) {
 // down steps to the next one that matches.
 func TestTUICommandComplete(t *testing.T) {
 	m := newTUI(nil)
-	m = typeIn(t, m, ":q")
+	m = typeIn(t, m, ":ba")
 	m, _ = press(t, m, "tab")
-	if got := m.command.Value(); got != "queue" {
-		t.Fatalf(":q<tab> = %q, want queue", got)
+	if got := m.command.Value(); got != "backups" {
+		t.Fatalf(":ba<tab> = %q, want backups", got)
 	}
 	m, _ = press(t, m, "esc")
-	m = typeIn(t, m, ":q")
+	m = typeIn(t, m, ":ba")
 	m, _ = press(t, m, "down")
 	m, _ = press(t, m, "tab")
-	if got := m.command.Value(); got != "quit" {
-		t.Fatalf(":q<down><tab> = %q, want quit", got)
+	if got := m.command.Value(); got != "backlog" {
+		t.Fatalf(":ba<down><tab> = %q, want backlog", got)
 	}
 	m, _ = press(t, m, "esc")
 	m = typeIn(t, m, ":re")

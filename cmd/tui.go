@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boxctl-io/boxctl-cli/internal/backlog"
 	"github.com/boxctl-io/boxctl-cli/internal/client"
-	"github.com/boxctl-io/boxctl-cli/internal/queue"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -33,7 +33,7 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your boxes in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your boxes, laid out like k9s.
 
-  :boxes :urls :images :sizes :backups :repos :queue   switch view (also :q, :help, :create)
+  :boxes :urls :images :sizes :backups :repos :backlog :runs   switch view (also :q, :help, :create)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the box; y its JSON; l a --goal run's log
@@ -41,12 +41,16 @@ var tuiCmd = &cobra.Command{
   enter        in :repos (your GitHub repos, newest push first, from gh),
                start Claude on a fresh box with the repo cloned (boxctl claude --repo)
   g            in :repos, ask for a goal and run it unattended there (--goal)
-  a            in :repos or :queue, queue a goal (boxctl queue): run when a slot
+  a            in :repos or :backlog, add a goal (boxctl backlog): run when a slot
                is free, its PR watched -- CI and conflicts get follow-up runs;
-               (in :queue the repository is picked from a list: type to narrow,
+               (in :backlog the repository is picked from a list: type to narrow,
                up/down to select, tab to complete);
-               in :queue m merges a ready PR, r retries, ctrl-d cancels, o opens it
-               While the tui is open it runs the queue (as boxctl queue run does).
+               in :backlog m merges a ready PR, r retries, ctrl-d cancels, o opens it,
+               enter shows the item's runs
+  :runs        every backlog run, going and ended (boxctl runs): s / l a run's
+               shell / log while its box is there, ctrl-d kills a run that's going
+               (its box deleted, its item left to you until r)
+               While the tui is open it runs the backlog (as boxctl backlog dispatch does).
   c            create a box (name, image and size are asked)
   p / r / K    pause / resume / keep (hold off the idle reaper's deletion)
   e            expose a port at a public URL; ctrl-d in :urls takes it down
@@ -62,11 +66,11 @@ var tuiCmd = &cobra.Command{
 		// Restore polls with a spinner on stderr; the screen is ours.
 		client.QuietProgress()
 		m := newTUI(newClient())
-		if qr, err := newQueueRunner(m.c); err == nil {
+		if qr, err := newBacklogRunner(m.c); err == nil {
 			m.qr = qr
 			defer func() {
 				if n := qr.inFlight(); n > 0 {
-					fmt.Fprintf(os.Stderr, "Waiting for %d queue run(s) to finish starting (Ctrl-C leaves them half-started)...\n", n)
+					fmt.Fprintf(os.Stderr, "Waiting for %d backlog run(s) to finish starting (Ctrl-C leaves them half-started)...\n", n)
 				}
 				qr.release()
 			}()
@@ -115,7 +119,7 @@ type (
 		sizes    []client.Size
 		backups  []client.Backup
 		repos    []ghRepo
-		queue    *queue.Queue
+		backlog  *backlog.Backlog
 		err      error
 	}
 	tuiActionMsg struct {
@@ -165,6 +169,7 @@ type page struct {
 	cursor   int
 	selected string // the row key under the cursor, to find it again after a refresh
 	sortCol  int    // -1: the view's own order
+	item     int    // :runs: only this backlog item's runs (0: every item's)
 	sortDesc bool
 
 	title  string   // pageText: the crumb
@@ -199,11 +204,11 @@ type tuiModel struct {
 	images  []client.Image
 	sizes   []client.Size
 	backups []client.Backup
-	repos   []ghRepo        // GitHub's, newest push first (tuirepos.go)
-	reposAt time.Time       // when repos came from GitHub, or the cache did
-	queue   *queue.Queue    // ~/.boxctl/queue.json (tuiqueue.go)
-	loaded  map[string]bool // resources listed at least once
-	loading map[string]bool // listings in flight
+	repos   []ghRepo         // GitHub's, newest push first (tuirepos.go)
+	reposAt time.Time        // when repos came from GitHub, or the cache did
+	backlog *backlog.Backlog // ~/.boxctl/backlog.json (tuibacklog.go)
+	loaded  map[string]bool  // resources listed at least once
+	loading map[string]bool  // listings in flight
 
 	pages       []page // the navigation stack; the last is shown
 	stateFilter stateFilter
@@ -222,13 +227,13 @@ type tuiModel struct {
 	flashErr bool
 	flashID  int
 
-	// qr runs the queue's passes while the tui is open (nil in tests);
-	// queueHeld names the other boxctl running them instead, if one is.
-	qr             *queueRunner
-	queuePassing   bool
-	queuePassAgain bool // a change asked for a pass while one was going
-	queuePassAt    time.Time
-	queueHeld      string
+	// qr runs the backlog's passes while the tui is open (nil in tests);
+	// backlogHeld names the other boxctl running them instead, if one is.
+	qr               *backlogRunner
+	backlogPassing   bool
+	backlogPassAgain bool // a change asked for a pass while one was going
+	backlogPassAt    time.Time
+	backlogHeld      string
 
 	width, height int
 	refreshedAt   time.Time
@@ -242,7 +247,7 @@ func newTUI(c *client.Client) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, queue, create, help, q"
+	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, backlog, runs, create, help, q"
 	cmd.CharLimit = 80
 	// Typing shows the first command the text starts, greyed out after it;
 	// tab takes it, up/down (ctrl-n/ctrl-p) step through the others.
@@ -264,7 +269,7 @@ func newTUI(c *client.Client) tuiModel {
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	return tea.Batch(m.list("boxes"), m.tick(), m.spin.Tick, loadQueueMsg)
+	return tea.Batch(m.list("boxes"), m.tick(), m.spin.Tick, loadBacklogMsg)
 }
 
 // top is the page shown.
@@ -285,8 +290,8 @@ func (m *tuiModel) list(resource string) tea.Cmd {
 	if resource == "repos" {
 		return m.listRepos(false)
 	}
-	if resource == "queue" {
-		return loadQueueMsg
+	if resource == "backlog" {
+		return loadBacklogMsg
 	}
 	if m.loading[resource] {
 		return nil
@@ -368,23 +373,23 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuiTickMsg:
 		cmds := []tea.Cmd{m.refresh(), m.tick()}
-		if time.Since(m.queuePassAt) >= queuePassEvery {
-			cmds = append(cmds, m.queuePass())
+		if time.Since(m.backlogPassAt) >= backlogPassEvery {
+			cmds = append(cmds, m.backlogPass())
 		}
 		return m, tea.Batch(cmds...)
 
-	case tuiQueuePassMsg:
-		return m, m.queuePassed(msg)
+	case tuiBacklogPassMsg:
+		return m, m.backlogPassed(msg)
 
-	case tuiQueueDoneMsg:
+	case tuiBacklogDoneMsg:
 		if msg.err != nil {
-			return m, tea.Batch(m.fail("%v", msg.err), loadQueueMsg)
+			return m, tea.Batch(m.fail("%v", msg.err), loadBacklogMsg)
 		}
 		if msg.text == "" {
 			return m, nil
 		}
-		m.queuePassAt = time.Time{} // a pass soon, so the change takes effect
-		return m, tea.Batch(m.say("%s", msg.text), loadQueueMsg, m.queuePass())
+		m.backlogPassAt = time.Time{} // a pass soon, so the change takes effect
+		return m, tea.Batch(m.say("%s", msg.text), loadBacklogMsg, m.backlogPass())
 
 	case bspinner.TickMsg:
 		if !m.busy() {
@@ -421,8 +426,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "repos":
 			m.repos = msg.repos
 			m.reposAt = time.Now()
-		case "queue":
-			m.queue = msg.queue
+		case "backlog":
+			m.backlog = msg.backlog
 		}
 		// A describe/json page follows its box.
 		for i := range m.pages {
