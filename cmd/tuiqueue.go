@@ -67,10 +67,27 @@ func loadQueueMsg() tea.Msg {
 	return tuiListMsg{resource: "queue", queue: q, err: err}
 }
 
-// queuePass runs one pass in the background, unless one is going or the
-// tui has no runner (tests).
+// setQueueNote shows note on item id in the table at once, while the
+// change it describes is still being made; the reload that follows
+// replaces it with what the queue file says.
+func (m *tuiModel) setQueueNote(id int, note string) {
+	if m.queue == nil {
+		return
+	}
+	if it := m.queue.Item(id); it != nil {
+		it.Note = note
+	}
+}
+
+// queuePass runs one pass in the background, unless the tui has no runner
+// (tests). With one going already, another follows it as soon as it ends:
+// the running one may have read GitHub before the change that asked.
 func (m *tuiModel) queuePass() tea.Cmd {
-	if m.qr == nil || m.queuePassing {
+	if m.qr == nil {
+		return nil
+	}
+	if m.queuePassing {
+		m.queuePassAgain = true
 		return nil
 	}
 	m.queuePassing = true
@@ -91,6 +108,10 @@ func (m *tuiModel) queuePassed(msg tuiQueuePassMsg) tea.Cmd {
 	var held errLoopHeld
 	m.queueHeld = ""
 	cmds := []tea.Cmd{loadQueueMsg}
+	if m.queuePassAgain {
+		m.queuePassAgain = false
+		cmds = append(cmds, m.queuePass())
+	}
 	switch {
 	case errors.As(msg.err, &held):
 		m.queueHeld = held.holder
@@ -169,11 +190,15 @@ func (m tuiModel) handleQueueKey(key string) (tea.Model, tea.Cmd, bool) {
 		m.ask(fmt.Sprintf("Merge %s#%d?", item.Repo, item.PR), []string{
 			fmt.Sprintf("Squash-merges it at %s, the commit CI passed on; GitHub refuses if the branch moved since.", short),
 		}, func(m tuiModel) (tea.Model, tea.Cmd) {
-			return m, m.queueChange(fmt.Sprintf("merged %s#%d", item.Repo, item.PR), func() error {
+			m.setQueueNote(id, "merging")
+			return m, tea.Batch(m.say("merging %s#%d...", item.Repo, item.PR), m.queueChange(fmt.Sprintf("merged %s#%d", item.Repo, item.PR), func() error {
 				ctx, cancel := queueCtx()
 				defer cancel()
-				return mergeQueueItem(ctx, &item, "squash")
-			})
+				if err := mergeQueueItem(ctx, &item, "squash"); err != nil {
+					return err
+				}
+				return markQueueMerged(id)
+			}))
 		})
 		return m, nil, true
 	case "r":

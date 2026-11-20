@@ -173,7 +173,10 @@ var queueMergeCmd = &cobra.Command{
 		if err := mergeQueueItem(cmd.Context(), it, queueMethod); err != nil {
 			return err
 		}
-		fmt.Printf("Merged %s#%d. The next pass marks #%d done and deletes its box.\n", it.Repo, it.PR, id)
+		if err := markQueueMerged(id); err != nil {
+			return fmt.Errorf("merged %s#%d, but couldn't record it: %w", it.Repo, it.PR, err)
+		}
+		fmt.Printf("Merged %s#%d; #%d is done. The next pass deletes its box.\n", it.Repo, it.PR, id)
 		return nil
 	},
 }
@@ -321,6 +324,19 @@ func cancelQueueItem(id int) error {
 			now := time.Now()
 			r.Ended, r.Outcome, r.Error = &now, queue.OutcomeLost, "cancelled"
 		}
+		return nil
+	})
+}
+
+// markQueueMerged records a merge made here at once, rather than leaving
+// the item "ready to merge" until a pass sees the PR merged. The pass
+// still deletes its boxes (done items keep none).
+func markQueueMerged(id int) error {
+	return changeQueueItem(id, func(it *queue.Item) error {
+		if it.State == queue.Cancelled {
+			return nil
+		}
+		it.State, it.Note, it.ReadySHA = queue.Done, "merged", ""
 		return nil
 	})
 }

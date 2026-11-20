@@ -454,7 +454,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   (`isRefusal` matches `internal/client`'s `refusalMessage` text) drops
   the run uncharged and backs off. The passes run in the tui every
   `queuePassEvery` (any view) or in `boxctl queue run`; `Queue.Claim`
-  keeps it to one loop. Follow-up prompts are `queue.GoalFor`. `:queue`'s
+  keeps it to one loop. A merge here (`queue merge`, the tui's `m`)
+  marks the item done itself (`markQueueMerged`) instead of waiting for a
+  pass to see the PR merged, and a tui key's pass asked for while one is
+  running follows it at once (`queuePassAgain`), not 30s later. Follow-up prompts are `queue.GoalFor`. `:queue`'s
   `a` asks for the repository from a list (`queueRepoChoices`: the current
   item's, the queued ones, then `:repos`' cache, loaded through
   `listRepos`): a prompt with `tuiDialog.choices` shows the matches under
