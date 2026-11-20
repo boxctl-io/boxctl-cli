@@ -123,8 +123,11 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   BRANCH. `printBoxes` is the listing itself, shared with `claude ls`.
 - `cmd/tui.go`, `tuiviews.go`, `tuiactions.go`, `tuirender.go`,
   `tuicreate.go`, `tuirepos.go` — `tui`: the boxes the way k9s shows a cluster (Bubble
-  Tea, with Lip Gloss and Bubbles' textinput and spinner -- the one
-  place those are used). `tuiviews.go` defines the resource views, each
+  Tea, with Lip Gloss and Bubbles' textinput, textarea and spinner --
+  the one place those are used). A goal prompt (`g`, `a`) is
+  `promptText`, a textarea sized to the dialog so a long goal wraps
+  onto the next line; enter submits it. Other prompts are one-line
+  `prompt`s. `tuiviews.go` defines the resource views, each
   a table over one listing (`:boxes`, `:urls` from the boxes' `ingress`,
   `:images`, `:sizes`, `:backups`) with its columns, hotkeys and
   shift+letter sort keys; rows are recomputed from the model's data at

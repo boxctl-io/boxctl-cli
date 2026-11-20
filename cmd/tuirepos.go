@@ -314,7 +314,7 @@ func (m tuiModel) claudeRepo(repo, goal string) (tea.Model, tea.Cmd) {
 // askGoal asks what Claude should do on repo, then starts it unattended
 // there (`boxctl claude --repo <repo> --goal "..."`).
 func (m tuiModel) askGoal(repo string) (tea.Model, tea.Cmd) {
-	cmd := m.prompt("Goal for Claude on "+repo, []string{
+	cmd := m.promptText("Goal for Claude on "+repo, []string{
 		"Claude works on it unattended on a new box (boxctl claude --goal) and opens a pull request.",
 		"boxctl ls, :boxes' RUN column and l on the box follow it.",
 	}, "what to do, e.g. bump Go and fix what breaks", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
@@ -323,9 +323,6 @@ func (m tuiModel) askGoal(repo string) (tea.Model, tea.Cmd) {
 		}
 		return m.claudeRepo(repo, value)
 	})
-	if m.dialog != nil && m.dialog.input != nil {
-		m.dialog.input.CharLimit = 0 // a goal is a sentence or two
-	}
 	return m, cmd
 }
 
