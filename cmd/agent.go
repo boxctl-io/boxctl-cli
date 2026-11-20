@@ -65,13 +65,17 @@ func (a *boxAgent) runs(run func(*cobra.Command, []string) error) func(*cobra.Co
 	}
 }
 
-// setupScript makes sure the box can run the agent in the multiplexer.
-// The claude-agent image already has tmux and Claude Code, so this does
-// nothing there; other images get the multiplexer (mux.setup) and the
-// agent's own install, once.
+// setupScript makes sure the box can run the agent in the multiplexer:
+// the multiplexer (mux.setup: installed, configured) and the agent's own
+// install, once each -- the claude-agent image already has tmux and
+// Claude Code -- and the agent's directory on an interactive shell's
+// PATH (~/.bashrc), which a non-login shell doesn't have otherwise.
 func (a *boxAgent) setupScript() string {
+	path := `export PATH="$HOME/` + a.binDir + `:$PATH"`
 	return `set -e
-export PATH="$HOME/` + a.binDir + `:$PATH"
+` + path + `
+# A shell you open on the box (a herdr or tmux pane, boxctl ssh) finds the agent too.
+grep -qsF ` + shellQuote(path) + ` "$HOME/.bashrc" || printf '%s\n' ` + shellQuote(path) + ` >>"$HOME/.bashrc"
 ` + mux.setup() + `
 command -v ` + a.bin + ` >/dev/null || { echo "Installing ` + a.product + `..." >&2; ` + a.install + ` >&2; }`
 }

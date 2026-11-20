@@ -147,8 +147,19 @@ func (herdrMux) detachKeys() string { return "Ctrl-b q" }
 
 // setup installs herdr with its own installer, into /usr/local/bin: the
 // installer's default, ~/.local/bin, isn't on a non-login shell's PATH.
+// It also turns off herdr's first-run screen (a welcome and an
+// integrations picker over every attach until someone dismisses it --
+// boxctl installs the agent's integration itself): `onboarding = false`
+// at the top of config.toml, unless the file already says either way.
+// A server already running is told to reload it.
 func (herdrMux) setup() string {
-	return `command -v herdr >/dev/null || { echo "Installing herdr..." >&2; curl -fsSL https://herdr.dev/install.sh | HERDR_INSTALL_DIR=/usr/local/bin sh >&2; }`
+	return `command -v herdr >/dev/null || { echo "Installing herdr..." >&2; curl -fsSL https://herdr.dev/install.sh | HERDR_INSTALL_DIR=/usr/local/bin sh >&2; }
+hc="$HOME/.config/herdr/config.toml"
+if ! grep -qsE '^[[:space:]]*onboarding[[:space:]]*=' "$hc"; then
+  mkdir -p "$(dirname "$hc")"
+  { printf '%s\n' '# boxctl: no first-run screen on a box' 'onboarding = false'; cat "$hc" 2>/dev/null || true; } >"$hc.tmp" && mv "$hc.tmp" "$hc"
+  herdr server reload-config >/dev/null 2>&1 || true
+fi`
 }
 
 // start starts the server headless if it isn't running (`herdr
