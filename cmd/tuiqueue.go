@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -200,7 +199,7 @@ func (m tuiModel) handleQueueKey(key string) (tea.Model, tea.Cmd, bool) {
 		}
 		repo, pr := it.Repo, it.PR
 		return m, func() tea.Msg {
-			err := exec.Command("gh", "pr", "view", strconv.Itoa(pr), "--repo", repo, "--web").Run()
+			err := openPR(repo, pr)
 			if err != nil {
 				return tuiQueueDoneMsg{err: fmt.Errorf("opening %s#%d: %v", repo, pr, err)}
 			}
