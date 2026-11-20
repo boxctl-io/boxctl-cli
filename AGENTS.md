@@ -164,7 +164,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `tuirender.go` draws it: header (info block, the view's hotkeys, the
   logo; hidden under 18 lines), the prompt line, one bordered box with a
   `Title(filter)[count]`, the crumbs line with the flash at its right;
-  `k9s` holds the colours. A terminal is `boxctl ssh <name>` run as a
+  `k9s` holds the colours. A text page's lines are wrapped to the
+  width at render time (`textLines`/`wrapLines`: continuations under a
+  `Key:   value` line's value), and scrolling counts the wrapped lines,
+  so a long queue goal or note reads in full. A terminal is `boxctl ssh <name>` run as a
   child process through `tea.ExecProcess` -- in-process `runSSH` would
   leave its uncancellable stdin reader behind to eat the next keypress
   -- with `--api-url` passed on and its stderr captured for the flash.
