@@ -326,3 +326,59 @@ func TestTUIQueuePassAgain(t *testing.T) {
 		t.Errorf("after the pass: passing %v, again %v", m.queuePassing, m.queuePassAgain)
 	}
 }
+
+// TestTUIQueueRepoChoices: the queue's `a` lists repositories -- the
+// current item's first, then the other queued ones, then :repos' -- that
+// typing narrows, up/down selects and tab completes.
+func TestTUIQueueRepoChoices(t *testing.T) {
+	stubQueue(t, nil, func([]string) ([]byte, error) { return nil, nil })
+	c, _ := fakeBoxServer(t, tuiFixture())
+	m := newTUI(c)
+	m.repos = []ghRepo{{FullName: "acme/boxctl-cli"}, {FullName: "acme/web"}, {FullName: "o/r"}}
+	m.loaded["repos"] = true
+	m.reposAt = time.Now()
+	m.queue = &queue.Queue{Items: []*queue.Item{{ID: 1, Repo: "o/r"}, {ID: 2, Repo: "zed/app"}}}
+	m.pages = []page{{kind: pageTable, view: queueView, sortCol: -1}}
+	m.moveTo(true) // item 2, zed/app
+	m, _ = press(t, m, "a")
+	if m.dialog == nil {
+		t.Fatal("no dialog")
+	}
+	if got := strings.Join(m.dialog.matches(&m), " "); got != "zed/app o/r acme/boxctl-cli acme/web" {
+		t.Fatalf("choices = %q", got)
+	}
+	// Enter alone takes the selected one, the current item's.
+	if got := m.dialog.value(&m); got != "zed/app" {
+		t.Errorf("empty value = %q", got)
+	}
+	// The name after the owner matches too; tab completes.
+	m = typeIn(t, m, "box")
+	if got := strings.Join(m.dialog.matches(&m), " "); got != "acme/boxctl-cli" {
+		t.Errorf("box matches = %q", got)
+	}
+	m, _ = press(t, m, "tab")
+	if got := m.dialog.input.Value(); got != "acme/boxctl-cli" {
+		t.Errorf("tab = %q", got)
+	}
+	// Narrow to acme's, down selects the second, enter takes it.
+	m.dialog.input.SetValue("")
+	m = typeIn(t, m, "acme")
+	m, _ = press(t, m, "down")
+	if lines := strings.Join(m.dialog.choiceLines(&m), "\n"); !strings.Contains(lines, "▸ acme/web") {
+		t.Errorf("lines = %q", lines)
+	}
+	m, _ = press(t, m, "up")
+	m, _ = press(t, m, "up")
+	m, _ = press(t, m, "enter")
+	if m.dialog == nil || m.dialog.title != "Queue a goal on acme/web" {
+		t.Fatalf("goal prompt: %+v", m.dialog)
+	}
+	// A typed owner/name nobody listed is taken as typed.
+	m, _ = press(t, m, "esc")
+	m, _ = press(t, m, "a")
+	m = typeIn(t, m, "acme/boxctl")
+	m, _ = press(t, m, "enter")
+	if m.dialog == nil || m.dialog.title != "Queue a goal on acme/boxctl" {
+		t.Fatalf("typed: %+v", m.dialog)
+	}
+}

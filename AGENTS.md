@@ -454,7 +454,13 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   keeps it to one loop. A merge here (`queue merge`, the tui's `m`)
   marks the item done itself (`markQueueMerged`) instead of waiting for a
   pass to see the PR merged, and a tui key's pass asked for while one is
-  running follows it at once (`queuePassAgain`), not 30s later. Follow-up prompts are `queue.GoalFor`.
+  running follows it at once (`queuePassAgain`), not 30s later. Follow-up prompts are `queue.GoalFor`. `:queue`'s
+  `a` asks for the repository from a list (`queueRepoChoices`: the current
+  item's, the queued ones, then `:repos`' cache, loaded through
+  `listRepos`): a prompt with `tuiDialog.choices` shows the matches under
+  its input (`matches`: prefix, then name-after-owner prefix, then
+  substring), up/down selects, tab completes, and enter takes the
+  selection unless an owner/name was typed (`tuiDialog.value`).
 - `cmd/imagepick.go` — the image of a new agent box: `--image`, else the
   stack (`stacks`, `stackOfFiles`) matched against `/api/images`
   (`pickImage`), else `claude-agent`; `sayNote` prints which and why.

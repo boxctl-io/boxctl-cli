@@ -246,20 +246,52 @@ func (m tuiModel) handleQueueKey(key string) (tea.Model, tea.Cmd, bool) {
 	return m, nil, false
 }
 
-// askQueueRepo asks which repository a new goal is for (the current
-// item's, to start with), then the goal.
+// askQueueRepo asks which repository a new goal is for -- from a list
+// that starts at the current item's, so enter alone takes that -- then
+// the goal.
 func (m tuiModel) askQueueRepo() (tea.Model, tea.Cmd) {
-	cmd := m.prompt("Queue a goal: which repository?", []string{"owner/name; the goal is asked next."}, "owner/name", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
+	cmd := m.prompt("Queue a goal: which repository?", []string{
+		"owner/name; the goal is asked next. Type to narrow the list,",
+		"up/down to select, tab to complete.",
+	}, "owner/name", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		owner, name, err := parseRepo(value)
 		if err != nil {
 			return m, m.fail("%v", err)
 		}
 		return m.askQueueGoal(owner + "/" + name)
 	})
-	if it := m.queueItem(); it != nil && m.dialog != nil && m.dialog.input != nil {
-		m.dialog.input.SetValue(it.Repo)
+	if m.dialog != nil && m.dialog.input != nil {
+		m.dialog.choices = queueRepoChoices
 	}
-	return m, cmd
+	// The repositories :repos lists: the cache at once, GitHub when it's
+	// stale -- the list fills in when that answers.
+	return m, tea.Batch(cmd, m.listRepos(false), m.spinIfBusy())
+}
+
+// queueRepoChoices are the repositories the queue's `a` offers: the
+// current item's, the others already queued (newest item first), then
+// the ones :repos lists.
+func queueRepoChoices(m *tuiModel) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(r string) {
+		if r != "" && !seen[strings.ToLower(r)] {
+			seen[strings.ToLower(r)] = true
+			out = append(out, r)
+		}
+	}
+	if it := m.queueItem(); it != nil {
+		add(it.Repo)
+	}
+	if m.queue != nil {
+		for i := len(m.queue.Items) - 1; i >= 0; i-- {
+			add(m.queue.Items[i].Repo)
+		}
+	}
+	for _, r := range m.repos {
+		add(r.FullName)
+	}
+	return out
 }
 
 // askQueueGoal asks for a goal on repo and queues it.
