@@ -458,6 +458,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   its input (`matches`: prefix, then name-after-owner prefix, then
   substring), up/down selects, tab completes, and enter takes the
   selection unless an owner/name was typed (`tuiDialog.value`).
+  `:queue`'s `o` is `cmd/prtab.go`'s `openPR`: on a Mac with Chrome
+  running, an AppleScript loads the PR into the one tab it used last
+  (its Chrome id in `~/.boxctl/pr-tab`, reused only while still on
+  github.com) instead of a new tab; otherwise `gh pr view --web`.
 - `cmd/imagepick.go` — the image of a new agent box: `--image`, else the
   stack (`stacks`, `stackOfFiles`) matched against `/api/images`
   (`pickImage`), else `claude-agent`; `sayNote` prints which and why.
