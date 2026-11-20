@@ -334,19 +334,20 @@ func (m tuiModel) handleBoxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m tuiModel) handleTextKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	h := m.tableHeight()
+	n := len(m.textLines())
 	switch msg.String() {
 	case "up", "k":
 		t.scroll = max(t.scroll-1, 0)
 	case "down", "j":
-		t.scroll = min(t.scroll+1, max(len(t.lines)-h, 0))
+		t.scroll = min(t.scroll+1, max(n-h, 0))
 	case "pgup", "ctrl+b", "b":
 		t.scroll = max(t.scroll-h, 0)
 	case "pgdown", "ctrl+f", "f", " ":
-		t.scroll = min(t.scroll+h, max(len(t.lines)-h, 0))
+		t.scroll = min(t.scroll+h, max(n-h, 0))
 	case "home", "g":
 		t.scroll = 0
 	case "end", "G":
-		t.scroll = max(len(t.lines)-h, 0)
+		t.scroll = max(n-h, 0)
 	case "esc", "q":
 		m.pop()
 	case ":":

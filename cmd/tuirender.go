@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // How the tui draws itself, after k9s: header (info, hotkeys, logo),
@@ -409,18 +410,66 @@ func (m tuiModel) table(w, inner int) (string, []string) {
 func (m tuiModel) textPage(w, inner int) (string, []string) {
 	t := m.top()
 	title := k9s.title.Render(t.title)
-	if len(t.lines) > inner {
-		pct := 100
-		if len(t.lines) > 0 {
-			pct = min((t.scroll+inner)*100/len(t.lines), 100)
-		}
+	all := m.textLines()
+	if len(all) > inner {
+		pct := min((t.scroll+inner)*100/len(all), 100)
 		title += k9s.count.Render(fmt.Sprintf("[%d%%]", pct))
 	}
 	var lines []string
-	for i := t.scroll; i < len(t.lines) && len(lines) < inner; i++ {
-		lines = append(lines, " "+k9s.text.Render(t.lines[i]))
+	for i := t.scroll; i < len(all) && len(lines) < inner; i++ {
+		lines = append(lines, " "+k9s.text.Render(all[i]))
 	}
 	return title, lines
+}
+
+// textLines is the top text page's lines wrapped to the box's width (less
+// the one-cell margin), so a long goal or note reads in full instead of
+// being cut at the right border. Scrolling counts these lines.
+func (m tuiModel) textLines() []string {
+	return wrapLines(m.top().lines, max(m.width-3, 1))
+}
+
+// wrapLines wraps each line longer than w cells at spaces (mid-word only
+// when a word is longer than a line), its continuations indented like
+// it -- or, for a describe page's "Key:   value" line, under the value.
+func wrapLines(lines []string, w int) []string {
+	var out []string
+	for _, l := range lines {
+		if ansi.StringWidth(l) <= w {
+			out = append(out, l)
+			continue
+		}
+		indent := continuationIndent(l)
+		if indent >= w/2 {
+			indent = 0
+		}
+		first, rest, _ := strings.Cut(ansi.Wrap(l, w, ""), "\n")
+		out = append(out, first)
+		if rest == "" {
+			continue
+		}
+		rest = strings.Join(strings.Fields(strings.ReplaceAll(rest, "\n", " ")), " ")
+		pad := strings.Repeat(" ", indent)
+		for _, c := range strings.Split(ansi.Wrap(rest, w-indent, ""), "\n") {
+			out = append(out, pad+c)
+		}
+	}
+	return out
+}
+
+// continuationIndent is where a wrapped line's next lines start: under
+// the value of a "Key:   value" line (a colon then two or more spaces),
+// else under the line's own first non-space character.
+func continuationIndent(l string) int {
+	lead := len(l) - len(strings.TrimLeft(l, " "))
+	if i := strings.Index(l, ":  "); i > lead && !strings.Contains(l[lead:i], " ") {
+		j := i + 1
+		for j < len(l) && l[j] == ' ' {
+			j++
+		}
+		return ansi.StringWidth(l[:j])
+	}
+	return lead
 }
 
 // dialogTitleAndLines draws the dialog centred in the box.
