@@ -216,10 +216,11 @@ type tuiModel struct {
 
 	// qr runs the queue's passes while the tui is open (nil in tests);
 	// queueHeld names the other boxctl running them instead, if one is.
-	qr           *queueRunner
-	queuePassing bool
-	queuePassAt  time.Time
-	queueHeld    string
+	qr             *queueRunner
+	queuePassing   bool
+	queuePassAgain bool // a change asked for a pass while one was going
+	queuePassAt    time.Time
+	queueHeld      string
 
 	width, height int
 	refreshedAt   time.Time

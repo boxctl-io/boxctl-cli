@@ -284,6 +284,23 @@ func TestTUIQueue(t *testing.T) {
 		t.Errorf("state = %s", q.Item(1).State)
 	}
 
+	// m on a ready item asks, y merges, and the row is done at once --
+	// not only once a pass sees the PR merged.
+	_ = changeQueueItem(1, func(it *queue.Item) error {
+		it.State, it.PR, it.ReadySHA, it.Note = queue.Active, 7, "abcdef0123", "ready to merge"
+		return nil
+	})
+	feed(loadQueueMsg)
+	m, _ = press(t, m, "m")
+	m, cmd = press(t, m, "y")
+	if it := m.queue.Item(1); it.Note != "merging" {
+		t.Errorf("while merging: %q", it.Note)
+	}
+	feed(cmd)
+	if it := m.queue.Item(1); it.State != queue.Done || it.Note != "merged" || it.ReadySHA != "" {
+		t.Errorf("merged: %s %q %q", it.State, it.Note, it.ReadySHA)
+	}
+
 	// a in :repos queues a goal on the row's repository.
 	m.repos = []ghRepo{{FullName: "o/other"}}
 	m.loaded["repos"] = true
@@ -294,5 +311,18 @@ func TestTUIQueue(t *testing.T) {
 	feed(cmd)
 	if q, _ = loadQueue(); len(q.Items) != 2 || q.Items[1].Repo != "o/other" {
 		t.Errorf("from :repos: %+v", q.Items)
+	}
+}
+
+// A pass asked for while one is going runs as soon as that one ends: the
+// one going may have read GitHub before the change that asked.
+func TestTUIQueuePassAgain(t *testing.T) {
+	m := tuiModel{qr: &queueRunner{}, queuePassing: true}
+	if cmd := m.queuePass(); cmd != nil || !m.queuePassAgain {
+		t.Fatalf("pass while passing: %v %v", cmd != nil, m.queuePassAgain)
+	}
+	m.queuePassed(tuiQueuePassMsg{})
+	if !m.queuePassing || m.queuePassAgain {
+		t.Errorf("after the pass: passing %v, again %v", m.queuePassing, m.queuePassAgain)
 	}
 }

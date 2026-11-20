@@ -451,7 +451,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   (`isRefusal` matches `internal/client`'s `refusalMessage` text) drops
   the run uncharged and backs off. The passes run in the tui every
   `queuePassEvery` (any view) or in `boxctl queue run`; `Queue.Claim`
-  keeps it to one loop. Follow-up prompts are `queue.GoalFor`.
+  keeps it to one loop. A merge here (`queue merge`, the tui's `m`)
+  marks the item done itself (`markQueueMerged`) instead of waiting for a
+  pass to see the PR merged, and a tui key's pass asked for while one is
+  running follows it at once (`queuePassAgain`), not 30s later. Follow-up prompts are `queue.GoalFor`.
 - `cmd/imagepick.go` — the image of a new agent box: `--image`, else the
   stack (`stacks`, `stackOfFiles`) matched against `/api/images`
   (`pickImage`), else `claude-agent`; `sayNote` prints which and why.
