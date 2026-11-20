@@ -453,13 +453,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   only through `Update`, which holds `backlog.json.lock`) and `Decide`, the
   pure engine: one pass's observations (every box's `run_status` from one
   `List`, each PR from one GraphQL query) in, state changes made and
-  actions out -- tested as tables, keep it free of I/O. `migrate.go`
-  moves an older `queue.json` and `queue/` logs over on first use, and
-  refuses while an older boxctl still holds that file's loop claim or
-  lock (two loops on two files would launch everything twice), and
-  leaves `queue.json` as a JSON string an older boxctl fails to read (an
-  idle old tui doesn't hold the loop, and would otherwise start an empty
-  queue there); the
+  actions out -- tested as tables, keep it free of I/O. The
   `queued` item state and the `q<id>-` box names kept their old words.
   `backlogdispatch.go` is
   the I/O: a run is `boxctl claude --repo R --box q<id>-<kind>-<n>
