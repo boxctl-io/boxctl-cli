@@ -43,6 +43,8 @@ var tuiCmd = &cobra.Command{
   g            in :repos, ask for a goal and run it unattended there (--goal)
   a            in :repos or :queue, queue a goal (boxctl queue): run when a slot
                is free, its PR watched -- CI and conflicts get follow-up runs;
+               (in :queue the repository is picked from a list: type to narrow,
+               up/down to select, tab to complete);
                in :queue m merges a ready PR, r retries, ctrl-d cancels, o opens it
                While the tui is open it runs the queue (as boxctl queue run does).
   c            create a box (name, image and size are asked)
@@ -182,6 +184,12 @@ type tuiDialog struct {
 	area   *textarea.Model  // a wrapping prompt (a goal); nil otherwise
 	yes    func(m tuiModel) (tea.Model, tea.Cmd)
 	submit func(m tuiModel, value string) (tea.Model, tea.Cmd)
+	// choices, when set, is what a prompt offers under its input (read at
+	// every key and render, so a list that arrives later shows up): the
+	// ones matching the text, up/down to select, tab to complete.
+	choices func(m *tuiModel) []string
+	sel     int  // the selected match
+	picked  bool // up/down chose sel since the text last changed
 }
 
 type tuiModel struct {
