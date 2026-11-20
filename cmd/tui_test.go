@@ -148,6 +148,10 @@ func press(t *testing.T, m tuiModel, key string) (tuiModel, tea.Cmd) {
 		msg = tea.KeyMsg{Type: tea.KeyEsc}
 	case "ctrl+d":
 		msg = tea.KeyMsg{Type: tea.KeyCtrlD}
+	case "tab":
+		msg = tea.KeyMsg{Type: tea.KeyTab}
+	case "down":
+		msg = tea.KeyMsg{Type: tea.KeyDown}
 	case "home":
 		msg = tea.KeyMsg{Type: tea.KeyHome}
 	default:
@@ -708,5 +712,33 @@ func TestBareRootHelpOffTerminal(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Available Commands") {
 		t.Errorf("want the help, got:\n%s", out.String())
+	}
+}
+
+// TestTUICommandComplete: tab in the : prompt takes the suggested command,
+// down steps to the next one that matches.
+func TestTUICommandComplete(t *testing.T) {
+	m := newTUI(nil)
+	m = typeIn(t, m, ":q")
+	m, _ = press(t, m, "tab")
+	if got := m.command.Value(); got != "queue" {
+		t.Fatalf(":q<tab> = %q, want queue", got)
+	}
+	m, _ = press(t, m, "esc")
+	m = typeIn(t, m, ":q")
+	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "tab")
+	if got := m.command.Value(); got != "quit" {
+		t.Fatalf(":q<down><tab> = %q, want quit", got)
+	}
+	m, _ = press(t, m, "esc")
+	m = typeIn(t, m, ":re")
+	m, _ = press(t, m, "tab")
+	if got := m.command.Value(); got != "repos" {
+		t.Fatalf(":re<tab> = %q, want repos", got)
+	}
+	m, _ = press(t, m, "enter")
+	if m.top().view != reposView {
+		t.Fatalf("view = %v, want repos", m.top().view.name)
 	}
 }

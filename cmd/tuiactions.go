@@ -101,7 +101,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	return m, m.fail("unknown command %q (try :boxes, :urls, :images, :sizes, :backups, :repos, :help, :q)", words[0])
+	return m, m.fail("unknown command %q (try :boxes, :urls, :images, :sizes, :backups, :repos, :queue, :help, :q)", words[0])
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -379,7 +379,7 @@ func (m *tuiModel) pushHelp() {
 	}
 	lines := []string{"General", ""}
 	general := [][2]string{
-		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos (`:boxes web` filters too)"},
+		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos, queue (`:boxes web` filters too; tab completes)"},
 		{":create", "create a box"}, {":ssh <box>", "open a terminal on a box"},
 		{":help", "this page"}, {":q", "quit (ctrl-c too)"},
 		{"/text", "filter the rows; esc clears"},

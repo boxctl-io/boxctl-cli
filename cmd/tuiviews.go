@@ -67,6 +67,17 @@ var commonHotkeys = []hotkey{
 
 var tuiViews = []*tableView{boxesView, urlsView, imagesView, sizesView, backupsView, reposView, queueView}
 
+// commandNames are what the : prompt suggests, in the order it offers
+// them: the views, then the other commands (so :q suggests queue first,
+// and quit after it).
+func commandNames() []string {
+	var names []string
+	for _, v := range tuiViews {
+		names = append(names, v.name)
+	}
+	return append(names, "create", "help", "ssh", "quit")
+}
+
 // findView is the view `:name` means, nil for none.
 func findView(name string) *tableView {
 	name = strings.ToLower(strings.TrimSpace(name))
