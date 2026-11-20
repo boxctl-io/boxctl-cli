@@ -27,7 +27,7 @@ func inProject(vm client.VM, dir, repo string) bool {
 		return repo != "" && hasRepo(vm, repo)
 	}
 	slug := projectSlug(dir)
-	for _, a := range []*boxAgent{claudeAgent, kiloAgent} {
+	for _, a := range []*boxAgent{claudeAgent} {
 		main := a.name + "-" + slug
 		if vm.Name == main || strings.HasPrefix(vm.Name, main+"-") {
 			return true

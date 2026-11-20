@@ -22,7 +22,6 @@ func TestInProject(t *testing.T) {
 		{vm("workspace-x-a1b2", map[string]string{"boxctl.run": "repo", "boxctl.repo": "o/a," + repo}), true},
 		// Unlabeled: the project's own box and its --own-box tasks, by name.
 		{vm("claude-boxctl", nil), true},
-		{vm("kilo-boxctl", nil), true},
 		{vm("claude-boxctl-fix", nil), true},
 		{vm("boxctl-fix-a1b2", nil), false},
 		{vm("spike-rancher", nil), false},

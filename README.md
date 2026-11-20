@@ -4,7 +4,7 @@
 
 **Firecracker microVMs ("boxes") from your terminal.** `boxctl` is the
 command-line client for [boxctl.io](https://boxctl.io): boot, connect to,
-expose and destroy boxes, and run Claude Code or Kilo on one, without
+expose and destroy boxes, and run Claude Code on one, without
 opening the dashboard.
 
 ```bash
@@ -19,7 +19,7 @@ boxctl rm my-box                            # done
 ## Contents
 
 - [Install](#install) · [Usage](#usage)
-- [Claude Code on a box](#claude-code-on-a-box-boxctl-claude) · [The backlog](#the-backlog-boxctl-backlog) · [Kilo on a box](#kilo-on-a-box-boxctl-kilo)
+- [Claude Code on a box](#claude-code-on-a-box-boxctl-claude) · [The backlog](#the-backlog-boxctl-backlog)
 - [Real ssh](#real-ssh-ssh-proxy) · [Claude Code plugin](#claude-code-plugin)
 - [Auth](#how-auth-works) · [Security](#security--credentials)
 - [`ssh`](#ssh--terminal-protocol) · [`port-forward`](#port-forward) · [`expose`](#expose)
@@ -37,7 +37,7 @@ boxctl rm my-box                            # done
 | `cp` | Copy a file or directory (`-r`) between a box and this machine, any size |
 | `port-forward`, `expose`, `unexpose` | Reach a box port locally, or publish it on the internet |
 | `backups`, `restore` | Saved copies of paused boxes |
-| `claude`, `kilo` | Run a coding agent on a box with your project |
+| `claude` | Run a coding agent on a box with your project |
 | `backlog` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:backlog` in the tui) |
 | `runs` | Every run of every backlog item, going and ended (`:runs` in the tui) |
 
@@ -127,7 +127,6 @@ boxctl expose my-box 3000         # a public https://my-box-xxxxxxxx.boxctl.app 
 boxctl unexpose my-box 3000       # take it down again
 ssh -o ProxyCommand='boxctl ssh-proxy %h' root@my-box   # real ssh (key needed, see below)
 boxctl claude                     # Claude Code on a box, with this project (see below)
-boxctl kilo                       # the same, for the Kilo CLI (see below)
 boxctl pause my-box
 boxctl resume my-box
 boxctl keep my-box                # don't let the idle reaper delete it for a day (below)
@@ -174,7 +173,7 @@ Runs Claude Code itself on a box instead of on your machine, attached to
 your terminal -- so its file edits and its shell both happen there, on
 the box's copy of the project, and nothing is synced.
 
-A box created for Claude (or Kilo) is the `ai-sandbox` size, 2 vCPU / 4 GiB RAM with a 10 GiB disk unless you pass `--size`.
+A box created for Claude is the `ai-sandbox` size, 2 vCPU / 4 GiB RAM with a 10 GiB disk unless you pass `--size`.
 
 By default every run gets a fresh box (`<directory>-<slug>-<id>`)
 that lives only as long as the run. A git repository with an `origin`
@@ -334,8 +333,7 @@ use, and where that came from, and labels the box `boxctl.model`/`boxctl.effort`
 status` on its Model line, `-` for a run that chose nothing. A box keeps
 the labels of the last session started on it; attaching to a running
 session changes neither, prints no Model line, and warns that `--model`
-and `--effort` only apply to a new session. `boxctl kilo` has no `--model`/`--effort`; pass
-`-- --model` there.
+and `--effort` only apply to a new session.
 
 **`--github` store, off -- and why a goal needs store.** `store` (the
 default) logs a token into the box's `gh`, where it stays until the box
@@ -406,7 +404,7 @@ shows every Claude on the box in its sidebar, marked working, blocked or
 idle, and `boxctl claude ls` shows that state in its ACTIVE column.
 `Ctrl-b q` detaches; `Ctrl-b w` switches workspaces. `--mux tmux` runs
 it in tmux instead (`Ctrl-b d` detaches), and `BOXCTL_MUX=tmux` makes
-that the default (`boxctl kilo` stays on tmux unless told otherwise). A
+that the default. A
 box remembers which one its sessions were started in, so later runs and
 `ls` look there without the flag -- and a box from before herdr was the
 default, with Claude still running in tmux, is attached in tmux; `--mux`
@@ -521,66 +519,6 @@ already on boxes carry on while neither is open. The backlog lives in
 It's the boxctl-orchestrator design (boxctl-orchestrator's
 `docs/designs/boxctl_orchestrator.md`), built into the CLI on top of goal
 runs.
-
-## Kilo on a box (`boxctl kilo`)
-
-The same thing for the [Kilo CLI](https://kilo.ai/docs): the box, the
-project copy, tmux or herdr (`--mux`), tasks, GitHub, `fetch`/`push` and the idle TTL all
-work as they do for `boxctl claude`, on a box of its own
-(a fresh `kilo-<directory>-<random>` deleted after the run, or
-`kilo-<directory>` with `--keep`).
-
-```bash
-cd ~/src/myproject
-boxctl kilo                             # a new box for this run, deleted afterwards
-boxctl kilo --keep                      # create or reattach to kilo-myproject
-boxctl kilo --prompt "fix the flaky auth test"
-boxctl kilo --detach --prompt "..."     # start it without attaching
-boxctl kilo -- --model provider/model   # arguments for kilo itself
-boxctl kilo --task auth                 # a second Kilo, in parallel, on its own branch
-boxctl kilo --env OPENAI_API_KEY        # pass a provider key from this shell
-boxctl kilo --handoff <session-id>      # continue a local Kilo session on a box
-boxctl kilo ls                          # this project's Kilo sessions
-boxctl kilo fetch                       # the box's branches and uncommitted work, as box/*
-boxctl kilo push                        # this branch to the box
-```
-
-The first run installs Kilo with its own installer
-(`https://kilo.ai/cli/install`, into `~/.kilo/bin`) and copies your
-`~/.config/kilo` -- `kilo.json`/`kilo.jsonc`, `AGENTS.md`, `agents/`,
-`commands/`, `modes/` and `skills/`, not `plugin/` -- as it is. A
-provider that configuration points at on this machine or your own
-network (`http://localhost:...`) isn't reachable from the box; pick
-another with `-- --model`.
-
-**Credentials.** Kilo on the box is logged in as it is here, with
-nothing on the box's disk: what `kilo auth login` saved on this machine
-(`~/.local/share/kilo/auth.json`, passed as `KILO_AUTH_CONTENT`) and the
-environment variables your configuration refers to (`{env:NAME}`), if
-they're set in this shell, go into the new session's environment the way
-Claude's token does -- over ssh's stdin into a file in the box's `/run`
-that the session reads and deletes. `--env NAME` (repeatable) passes one
-more variable the same way. `--kilo-auth login` passes none of yours:
-log in on the box with `/connect`, and that login stays there.
-
-**Handing off a session.** `boxctl kilo --handoff <session-id>` continues
-one of this machine's Kilo sessions on the box. Take the ID from `kilo
-session list`; the start of an ID is enough when only one session has it
-(several matches are refused, naming them). Only the session's export
-(`kilo export`) is copied -- never Kilo's database or credentials: it
-goes over ssh's stdin into a temporary file under `/run/boxctl` on the
-box, is imported there (`kilo import`) from the project directory, and
-the file is removed. Kilo then starts with `--session <id>`.
-The project has the same absolute path on the box. A second handoff
-while Kilo runs on the box -- boxctl's own session or any other `kilo`
-process -- is refused: quit it first, or hand off to a fresh box.
-`--handoff` can't be combined with `--task`, `--own-box` or `--prompt`,
-nor with `--continue`, `--session` or `--fork` after `--`. `--project
-<dir>` picks the project when you aren't in it. A box that already had
-the project keeps its own copy, so local changes since then aren't on
-it: commit them and `boxctl kilo push`, or hand off to a fresh `--box`.
-On a run that deletes its box, the continued conversation lives on the
-box only; use `--keep` to keep it.
 
 ## Copying files (`cp`)
 

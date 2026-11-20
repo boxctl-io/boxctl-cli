@@ -238,17 +238,13 @@ func TestAgentDefaultMux(t *testing.T) {
 	if got := claudeAgent.defaultMux(); got != "herdr" {
 		t.Errorf("claude's default = %q, want herdr", got)
 	}
-	if got := kiloAgent.defaultMux(); got != "tmux" {
-		t.Errorf("kilo's default = %q, want tmux", got)
-	}
 	t.Setenv(muxEnv, "tmux")
 	if got := claudeAgent.defaultMux(); got != "tmux" {
 		t.Errorf("claude's default with %s=tmux = %q, want tmux", muxEnv, got)
 	}
 }
 
-// The multiplexer a run uses is its own command's --mux default, though
-// claude and kilo bind the same variable.
+// The multiplexer a run uses is its own agent's --mux default.
 func TestRunsTakesItsCommandsMux(t *testing.T) {
 	savedMux, savedArg, savedAgent, savedModel := mux, muxArg, agent, runModel
 	t.Cleanup(func() { mux, muxArg, agent, runModel = savedMux, savedArg, savedAgent, savedModel })
@@ -256,7 +252,7 @@ func TestRunsTakesItsCommandsMux(t *testing.T) {
 		name string
 		a    *boxAgent
 		want string
-	}{{"claude", claudeAgent, "herdr"}, {"kilo", kiloAgent, "tmux"}} {
+	}{{"claude", claudeAgent, "herdr"}} {
 		c, _, err := rootCmd.Find([]string{tc.name})
 		if err != nil {
 			t.Fatal(err)

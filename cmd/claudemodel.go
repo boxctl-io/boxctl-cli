@@ -255,8 +255,7 @@ func settingsModel(path string) (harnessModel, bool) {
 }
 
 // runModel is the running claude command's choice, which a box created
-// for it is labeled with (withModelLabels). Nil for an agent that has
-// none (kilo): boxAgent.runs resets it.
+// for it is labeled with (withModelLabels). boxAgent.runs resets it.
 var runModel *modelChoice
 
 // chooseModel resolves the run's model and effort and makes them

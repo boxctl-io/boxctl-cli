@@ -247,7 +247,7 @@ func printBoxes(ctx context.Context, vms []client.VM, format string, all bool, n
 }
 
 // runText is ls's RUN column: what made the box and what for, from its
-// labels alone (sessionLabels, runLabels) -- "claude goal", "kilo
+// labels alone (sessionLabels, runLabels) -- "claude goal", "claude
 // session" -- and, for a run that reports one, how it's going from its
 // run_status ("claude goal: done"). A goal box without a run_status (an
 // image older than boxctl-status) gets "?": ls never reaches into a box

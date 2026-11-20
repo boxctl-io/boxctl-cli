@@ -6,13 +6,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// boxAgent is a coding agent boxctl runs on a box -- `boxctl claude`,
-// `boxctl kilo` -- or rather the little that differs between them: what
-// it's called, and how it's installed and started. The box, the project
-// copy, the multiplexer, tasks, GitHub and fetch/push are the same for all of them
-// (the claude*.go files), and read the running command's agent from
-// `agent`. So are the flags: each agent's command binds the same
-// variables (claudeBox, claudeTask, ...), since only one of them runs.
+// boxAgent is a coding agent boxctl runs on a box -- `boxctl claude` --
+// or rather the little that is its own: what it's called, and how it's
+// installed and started. The box, the project copy, the multiplexer,
+// tasks, GitHub and fetch/push are agent-independent (the claude*.go
+// files), and read the running command's agent from `agent`.
 type boxAgent struct {
 	name    string // the subcommand, the box-name prefix and the session's name
 	title   string // what messages call it
@@ -49,10 +47,8 @@ func (a *boxAgent) runs(run func(*cobra.Command, []string) error) func(*cobra.Co
 	return func(cmd *cobra.Command, args []string) error {
 		agent = a
 		runModel = nil
-		// claude and kilo bind the same muxArg, and registering kilo's
-		// flag wrote its default (tmux) over claude's: unless --mux was
-		// given, take this agent's own default (ls/fetch/push have no
-		// --mux at all).
+		// Unless --mux was given, take this agent's own default
+		// (ls/fetch/push have no --mux at all).
 		if f := cmd.Flags().Lookup("mux"); f == nil || !f.Changed {
 			muxArg = a.defaultMux()
 		}

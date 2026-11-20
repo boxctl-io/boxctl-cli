@@ -538,7 +538,7 @@ type claudeTarget struct {
 // openClaudeBox resolves the project and its box (--box, or
 // <agent>-<dir>), makes sure it's running and reachable with boxctl's
 // key, and checks it holds this project and no other. create says
-// whether a missing box is created (boxctl claude, kilo) or an error (fetch,
+// whether a missing box is created (boxctl claude) or an error (fetch,
 // push); setTTL applies --idle-ttl to a box that already exists.
 func openClaudeBox(ctx context.Context, create, setTTL bool) (*claudeTarget, error) {
 	dir, err := projectDir()
