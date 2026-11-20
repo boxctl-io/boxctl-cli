@@ -271,7 +271,7 @@ func queueRepoChoices(m *tuiModel) []string {
 
 // askQueueGoal asks for a goal on repo and queues it.
 func (m tuiModel) askQueueGoal(repo string) (tea.Model, tea.Cmd) {
-	cmd := m.prompt("Queue a goal on "+repo, []string{
+	cmd := m.promptText("Queue a goal on "+repo, []string{
 		"It runs unattended (boxctl claude --goal) when a slot is free, and ends in a pull request",
 		"that :queue then watches: CI and conflicts get follow-up runs; m merges it once it's green.",
 	}, "what to do, e.g. bump Go and fix what breaks", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
@@ -283,9 +283,6 @@ func (m tuiModel) askQueueGoal(repo string) (tea.Model, tea.Cmd) {
 			return err
 		})
 	})
-	if m.dialog != nil && m.dialog.input != nil {
-		m.dialog.input.CharLimit = 0
-	}
 	return m, cmd
 }
 

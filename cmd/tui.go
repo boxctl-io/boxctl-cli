@@ -10,6 +10,7 @@ import (
 	"github.com/boxctl-io/boxctl-cli/internal/client"
 	"github.com/boxctl-io/boxctl-cli/internal/queue"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -179,7 +180,8 @@ type page struct {
 type tuiDialog struct {
 	title  string
 	body   []string
-	input  *textinput.Model // a prompt; nil for a question
+	input  *textinput.Model // a one-line prompt; nil for a question
+	area   *textarea.Model  // a wrapping prompt (a goal); nil otherwise
 	yes    func(m tuiModel) (tea.Model, tea.Cmd)
 	submit func(m tuiModel, value string) (tea.Model, tea.Cmd)
 	// choices, when set, is what a prompt offers under its input (read at
