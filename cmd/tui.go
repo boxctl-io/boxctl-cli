@@ -33,7 +33,7 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your boxes in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your boxes, laid out like k9s.
 
-  :boxes :urls :images :sizes :backups :repos :backlog   switch view (also :q, :help, :create)
+  :boxes :urls :images :sizes :backups :repos :backlog :runs   switch view (also :q, :help, :create)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the box; y its JSON; l a --goal run's log
@@ -45,7 +45,11 @@ var tuiCmd = &cobra.Command{
                is free, its PR watched -- CI and conflicts get follow-up runs;
                (in :backlog the repository is picked from a list: type to narrow,
                up/down to select, tab to complete);
-               in :backlog m merges a ready PR, r retries, ctrl-d cancels, o opens it
+               in :backlog m merges a ready PR, r retries, ctrl-d cancels, o opens it,
+               enter shows the item's runs
+  :runs        every backlog run, going and ended (boxctl runs): s / l a run's
+               shell / log while its box is there, ctrl-d kills a run that's going
+               (its box deleted, its item left to you until r)
                While the tui is open it runs the backlog (as boxctl backlog dispatch does).
   c            create a box (name, image and size are asked)
   p / r / K    pause / resume / keep (hold off the idle reaper's deletion)
@@ -165,6 +169,7 @@ type page struct {
 	cursor   int
 	selected string // the row key under the cursor, to find it again after a refresh
 	sortCol  int    // -1: the view's own order
+	item     int    // :runs: only this backlog item's runs (0: every item's)
 	sortDesc bool
 
 	title  string   // pageText: the crumb
@@ -242,7 +247,7 @@ func newTUI(c *client.Client) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, backlog, create, help, q"
+	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, backlog, runs, create, help, q"
 	cmd.CharLimit = 80
 	// Typing shows the first command the text starts, greyed out after it;
 	// tab takes it, up/down (ctrl-n/ctrl-p) step through the others.

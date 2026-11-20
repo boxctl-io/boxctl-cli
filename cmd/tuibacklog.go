@@ -36,7 +36,7 @@ var backlogView = &tableView{
 	stateCol: 3,
 	empty:    "Nothing queued: a queues a goal (here, or on a repository in :repos).",
 	hotkeys: []hotkey{{"a", "add a goal"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"L", "slot limit"}, {"o", "open PR"},
-		{"l", "run's log"}, {"s", "run's shell"}, {"ctrl-d", "cancel"}, {"d", "describe"}},
+		{"l", "run's log"}, {"s", "run's shell"}, {"ctrl-d", "cancel"}, {"enter", "runs"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		if m.backlog == nil {
 			return nil
@@ -161,7 +161,12 @@ func (m tuiModel) handleBacklogKey(key string) (tea.Model, tea.Cmd, bool) {
 	case "L":
 		md, cmd := m.askBacklogLimit()
 		return md, cmd, true
-	case "enter", "d":
+	case "enter":
+		if it != nil {
+			m.openRuns(it.ID)
+		}
+		return m, nil, true
+	case "d":
 		if it != nil {
 			m.push(page{kind: pageText, title: fmt.Sprintf("#%d", it.ID), lines: describeBacklogItem(it)})
 		}

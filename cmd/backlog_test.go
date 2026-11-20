@@ -497,3 +497,22 @@ func TestTUIBacklogLimit(t *testing.T) {
 		t.Errorf("limits = %+v", q.Limits)
 	}
 }
+
+// The backlog's commands replaced queue's, with no alias for the old ones.
+func TestBacklogCommandNames(t *testing.T) {
+	if c, _, _ := rootCmd.Find([]string{"queue"}); c != rootCmd {
+		t.Errorf("queue found: %s", c.CommandPath())
+	}
+	if c, _, _ := rootCmd.Find([]string{"backlog", "run"}); c == backlogDispatchCmd {
+		t.Error("backlog run found")
+	}
+	if c, _, _ := rootCmd.Find([]string{"backlog", "dispatch"}); c != backlogDispatchCmd {
+		t.Errorf("backlog dispatch = %s", c.CommandPath())
+	}
+	if c, _, _ := rootCmd.Find([]string{"runs"}); c != runsCmd {
+		t.Errorf("runs = %s", c.CommandPath())
+	}
+	if findView("queue") != nil || findView("q") != nil {
+		t.Error(":queue still opens a view")
+	}
+}
