@@ -352,3 +352,66 @@ func TestTUIQueueRepoChoices(t *testing.T) {
 		t.Fatalf("typed: %+v", m.dialog)
 	}
 }
+
+func TestParseQueueLimit(t *testing.T) {
+	for _, c := range []struct {
+		in      string
+		global  int
+		perRepo int // 0: not given
+		bad     bool
+	}{
+		{in: "3", global: 3},
+		{in: " 4 2 ", global: 4, perRepo: 2},
+		{in: "4/1", global: 4, perRepo: 1},
+		{in: "", bad: true},
+		{in: "0", bad: true},
+		{in: "x", bad: true},
+		{in: "1 2 3", bad: true},
+		{in: "2 -1", bad: true},
+	} {
+		g, p, err := parseQueueLimit(c.in)
+		if (err != nil) != c.bad {
+			t.Errorf("%q: err = %v", c.in, err)
+			continue
+		}
+		if c.bad {
+			continue
+		}
+		got := 0
+		if p != nil {
+			got = *p
+		}
+		if g != c.global || got != c.perRepo {
+			t.Errorf("%q = %d, %d", c.in, g, got)
+		}
+	}
+}
+
+// TestTUIQueueLimit: L in :queue asks for the slot limit and saves it.
+func TestTUIQueueLimit(t *testing.T) {
+	stubQueue(t, nil, func([]string) ([]byte, error) { return nil, nil })
+	tuiFlashFor = time.Millisecond
+	c, _ := fakeBoxServer(t, tuiFixture())
+	m := newTUI(c)
+	m.queue = &queue.Queue{Limits: queue.DefaultLimits}
+	m.pages = []page{{kind: pageTable, view: queueView, sortCol: -1}}
+	m, _ = press(t, m, "L")
+	if m.dialog == nil || m.dialog.title != "Slot limit" {
+		t.Fatalf("dialog: %+v", m.dialog)
+	}
+	m = typeIn(t, m, "5 3")
+	m, cmd := press(t, m, "enter")
+	runCmd(cmd)
+	q, _ := loadQueue()
+	if q.Limits != (queue.Limits{Global: 5, PerRepo: 3}) {
+		t.Errorf("limits = %+v", q.Limits)
+	}
+	// One number leaves the per-repository limit.
+	m, _ = press(t, m, "L")
+	m = typeIn(t, m, "1")
+	_, cmd = press(t, m, "enter")
+	runCmd(cmd)
+	if q, _ = loadQueue(); q.Limits != (queue.Limits{Global: 1, PerRepo: 3}) {
+		t.Errorf("limits = %+v", q.Limits)
+	}
+}

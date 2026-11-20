@@ -37,7 +37,7 @@ var queueView = &tableView{
 	columns:  []column{{"ID", 'I'}, {"PRI", 'P'}, {"REPO", 'R'}, {"STATE", 'S'}, {"RUN", 0}, {"PR", 0}, {"NOTE", 'N'}, {"GOAL", 'G'}},
 	stateCol: 3,
 	empty:    "Nothing queued: a queues a goal (here, or on a repository in :repos).",
-	hotkeys: []hotkey{{"a", "queue a goal"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"o", "open PR"},
+	hotkeys: []hotkey{{"a", "queue a goal"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"L", "slot limit"}, {"o", "open PR"},
 		{"l", "run's log"}, {"s", "run's shell"}, {"ctrl-d", "cancel"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		if m.queue == nil {
@@ -138,6 +138,9 @@ func (m tuiModel) handleQueueKey(key string) (tea.Model, tea.Cmd, bool) {
 	switch key {
 	case "a":
 		md, cmd := m.askQueueRepo()
+		return md, cmd, true
+	case "L":
+		md, cmd := m.askQueueLimit()
 		return md, cmd, true
 	case "enter", "d":
 		if it != nil {
@@ -267,6 +270,53 @@ func queueRepoChoices(m *tuiModel) []string {
 		add(r.FullName)
 	}
 	return out
+}
+
+// askQueueLimit asks for the queue's slot limit: how many runs go at
+// once in all, and optionally on one repository ("3", or "3 2").
+func (m tuiModel) askQueueLimit() (tea.Model, tea.Cmd) {
+	cur := queue.DefaultLimits
+	if m.queue != nil {
+		cur = m.queue.Limits
+	}
+	cmd := m.prompt("Slot limit", []string{
+		fmt.Sprintf("Now %d runs at once, %d per repository. Each run is a box of yours.", cur.Global, cur.PerRepo),
+		"Type how many in all, optionally then how many per repository: 3, or 3 2.",
+	}, fmt.Sprintf("%d %d", cur.Global, cur.PerRepo), func(m tuiModel, value string) (tea.Model, tea.Cmd) {
+		global, perRepo, err := parseQueueLimit(value)
+		if err != nil {
+			return m, m.fail("%v", err)
+		}
+		return m, func() tea.Msg {
+			l, err := setQueueLimits(&global, perRepo)
+			if err != nil {
+				return tuiQueueDoneMsg{err: err}
+			}
+			return tuiQueueDoneMsg{text: fmt.Sprintf("slot limit: %d at once, %d per repository", l.Global, l.PerRepo)}
+		}
+	})
+	return m, cmd
+}
+
+// parseQueueLimit reads L's answer: the global limit, then optionally the
+// per-repository one (nil when not given), separated by a space or "/".
+func parseQueueLimit(s string) (int, *int, error) {
+	f := strings.FieldsFunc(s, func(r rune) bool { return r == ' ' || r == '/' || r == ',' || r == '\t' })
+	if len(f) < 1 || len(f) > 2 {
+		return 0, nil, errors.New("a slot limit is a number, or two: in all, per repository")
+	}
+	var n [2]int
+	for i, w := range f {
+		v, err := strconv.Atoi(w)
+		if err != nil || v < 1 {
+			return 0, nil, fmt.Errorf("%q: a slot limit is a whole number, at least 1", w)
+		}
+		n[i] = v
+	}
+	if len(f) == 1 {
+		return n[0], nil, nil
+	}
+	return n[0], &n[1], nil
 }
 
 // askQueueGoal asks for a goal on repo and queues it.
