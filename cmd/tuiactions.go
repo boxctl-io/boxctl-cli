@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/boxctl-io/boxctl-cli/internal/client"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // The tui's keys and the actions behind them: the `:` command prompt,
@@ -127,6 +129,20 @@ func (m tuiModel) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m tuiModel) handleDialogKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	d := m.dialog
+	if d.area != nil {
+		switch msg.Type {
+		case tea.KeyEsc:
+			m.dialog = nil
+			return m, nil
+		case tea.KeyEnter:
+			m.dialog = nil
+			return d.submit(m, strings.TrimSpace(d.area.Value()))
+		}
+		d.area.SetWidth(m.dialogAreaWidth())
+		var cmd tea.Cmd
+		*d.area, cmd = d.area.Update(msg)
+		return m, cmd
+	}
 	if d.input != nil {
 		switch msg.Type {
 		case tea.KeyEsc:
@@ -161,6 +177,34 @@ func (m *tuiModel) prompt(title string, body []string, placeholder string, submi
 	m.dialog = &tuiDialog{title: title, body: body, input: &in, submit: submit}
 	return in.Focus()
 }
+
+// promptText opens a prompt for a sentence or two (a goal): unlike
+// prompt's one line, what's typed wraps onto the next line inside the
+// dialog instead of running off its right edge. Enter still submits.
+func (m *tuiModel) promptText(title string, body []string, placeholder string, submit func(m tuiModel, value string) (tea.Model, tea.Cmd)) tea.Cmd {
+	a := textarea.New()
+	a.ShowLineNumbers = false
+	a.CharLimit = 0
+	a.Placeholder = placeholder
+	a.KeyMap.InsertNewline.SetEnabled(false) // enter submits
+	a.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	a.FocusedStyle.Base = lipgloss.NewStyle()
+	a.BlurredStyle.Base = lipgloss.NewStyle()
+	a.SetPromptFunc(2, func(line int) string {
+		if line == 0 {
+			return "> "
+		}
+		return "  "
+	})
+	a.SetHeight(goalPromptLines)
+	m.dialog = &tuiDialog{title: title, body: body, area: &a, submit: submit}
+	a.SetWidth(m.dialogAreaWidth())
+	return a.Focus()
+}
+
+// goalPromptLines is how many lines promptText's input shows; a longer
+// goal scrolls inside it.
+const goalPromptLines = 4
 
 // --- table keys -----------------------------------------------------------
 

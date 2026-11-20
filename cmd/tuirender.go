@@ -429,9 +429,15 @@ func (m tuiModel) dialogTitleAndLines(w, inner int) (string, []string) {
 	var body []string
 	body = append(body, d.body...)
 	body = append(body, "")
-	if d.input != nil {
+	switch {
+	case d.area != nil:
+		a := *d.area
+		a.SetWidth(m.dialogAreaWidth())
+		body = append(body, strings.Split(a.View(), "\n")...)
+		body = append(body, "", k9s.hotKey.Render("<enter>")+" ok   "+k9s.hotKey.Render("<esc>")+" cancel")
+	case d.input != nil:
 		body = append(body, d.input.View(), "", k9s.hotKey.Render("<enter>")+" ok   "+k9s.hotKey.Render("<esc>")+" cancel")
-	} else {
+	default:
 		body = append(body, k9s.hotKey.Render("<y>")+" yes   "+k9s.hotKey.Render("<n>")+" no")
 	}
 	bw := lipgloss.Width(d.title)
@@ -455,6 +461,25 @@ func (m tuiModel) dialogTitleAndLines(w, inner int) (string, []string) {
 	}
 	title := k9s.title.Render(m.pageTitle())
 	return title, lines
+}
+
+// dialogAreaWidth is the width of a promptText input: the dialog's
+// text width (its title and body lines, at least 60 columns), within
+// the screen less the box's and the dialog's borders and padding.
+func (m tuiModel) dialogAreaWidth() int {
+	d := m.dialog
+	tw := 60
+	if d != nil {
+		tw = max(tw, lipgloss.Width(d.title))
+		for _, l := range d.body {
+			tw = max(tw, lipgloss.Width(l))
+		}
+	}
+	if m.width > 0 {
+		// box border 2, dialog border 2, "  " before, 2 spare.
+		tw = min(tw, m.width-2-2-2-2-2)
+	}
+	return max(tw, 10)
 }
 
 // pageTitle is the top page's own title, for a dialog over it.
