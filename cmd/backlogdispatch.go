@@ -186,7 +186,7 @@ func (r *backlogRunner) do(ctx context.Context, a backlog.Action) backlogEvent {
 	case backlog.RemoveBox:
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		if err := r.c.Destroy(ctx, a.Box); err != nil && !strings.Contains(err.Error(), "not found") {
+		if err := destroyBox(ctx, r.c, a.Box); err != nil {
 			return backlogEvent{fmt.Sprintf("#%d: deleting %s: %v", a.Item, a.Box, err), true}
 		}
 		return backlogEvent{text: fmt.Sprintf("#%d: deleted %s", a.Item, a.Box)}
@@ -204,6 +204,14 @@ func (r *backlogRunner) do(ctx context.Context, a backlog.Action) backlogEvent {
 		return backlogEvent{text: fmt.Sprintf("#%d: updating %s#%d's branch with its base", a.Item, a.Repo, a.PR)}
 	}
 	return backlogEvent{}
+}
+
+// destroyBox deletes a run's box; one already gone is no error.
+func destroyBox(ctx context.Context, c *client.Client, name string) error {
+	if err := c.Destroy(ctx, name); err != nil && !strings.Contains(err.Error(), "not found") {
+		return err
+	}
+	return nil
 }
 
 // backlogLaunchArgs is the boxctl command line of a run, less the binary.
@@ -418,7 +426,7 @@ func parsePR(out []byte) (*backlog.PR, error) {
 	return pr, nil
 }
 
-// mergeBacklogItem merges it's pull request at the head CI passed on.
+// mergeBacklogItem merges its pull request at the head CI passed on.
 func mergeBacklogItem(ctx context.Context, it *backlog.Item, method string) error {
 	if it.PR == 0 {
 		return fmt.Errorf("#%d has no pull request yet", it.ID)

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -93,12 +92,14 @@ func (m tuiModel) handleRunsKey(key string) (tea.Model, tea.Cmd, bool) {
 	case "l":
 		md, cmd := m.logs(r.run.Box)
 		return md, cmd, true
+	case "ctrl+d":
+		if r.run.Ended != nil {
+			return m, m.fail("#%d's %s run already ended %s", r.it.ID, r.run.Kind, r.run.Outcome), true
+		}
+		md, cmd := m.askKill(*r)
+		return md, cmd, true
 	}
-	if r.run.Ended != nil {
-		return m, m.fail("#%d's %s run already ended %s", r.it.ID, r.run.Kind, r.run.Outcome), true
-	}
-	md, cmd := m.askKill(*r)
-	return md, cmd, true
+	return m, nil, true
 }
 
 // noRunBox is the flash for a key that needs a run's box when it isn't
@@ -137,7 +138,7 @@ func (m tuiModel) askKill(r backlogRun) (tea.Model, tea.Cmd) {
 			}
 			ctx, cancel := backlogCtx()
 			defer cancel()
-			if err := c.Destroy(ctx, box); err != nil && !strings.Contains(err.Error(), "not found") {
+			if err := destroyBox(ctx, c, box); err != nil {
 				return fmt.Errorf("#%d's run is killed, but deleting %s failed (the next pass tries again): %v", id, box, err)
 			}
 			return nil

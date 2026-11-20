@@ -347,7 +347,7 @@ func parseBacklogLimit(s string) (int, *int, error) {
 	return n[0], &n[1], nil
 }
 
-// askBacklogGoal asks for a goal on repo and queues it.
+// askBacklogGoal asks for a goal on repo and adds it to the backlog.
 func (m tuiModel) askBacklogGoal(repo string) (tea.Model, tea.Cmd) {
 	cmd := m.promptText("Add a goal on "+repo, []string{
 		"It runs unattended (boxctl claude --goal) when a slot is free, and ends in a pull request",

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -131,13 +130,11 @@ func runRuns(cmd *cobra.Command, args []string) error {
 	}
 	rows := backlogRuns(q, boxes, 0)
 	if format == "json" {
-		out := []backlogRunJSON{}
+		var out []backlogRunJSON
 		for _, r := range rows {
 			out = append(out, backlogRunJSON{Item: r.it.ID, Repo: r.it.Repo, Kind: string(r.run.Kind), Box: r.run.Box, State: r.state, Started: r.run.Started, Ended: r.run.Ended, Error: r.run.Error})
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		return enc.Encode(out)
+		return printJSON(out)
 	}
 	if len(rows) == 0 {
 		fmt.Fprintln(os.Stderr, "No runs yet: boxctl backlog add a goal, and the tui or boxctl backlog dispatch starts them.")

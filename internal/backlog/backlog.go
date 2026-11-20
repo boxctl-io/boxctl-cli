@@ -141,7 +141,7 @@ func Kill(it *Item, box string, now time.Time) error {
 	if r == nil || r.Box != box {
 		return fmt.Errorf("#%d has no run going on %s", it.ID, box)
 	}
-	r.Ended, r.Outcome, r.Error = &now, OutcomeKilled, "killed"
+	r.Ended, r.Outcome = &now, OutcomeKilled
 	setState(it, NeedsYou, fmt.Sprintf("run killed (%s on %s)", r.Kind, box), now)
 	return nil
 }
