@@ -29,7 +29,7 @@ not a terminal, so they give no picture either.
 
 Run the real binary against a throwaway home and a fake API:
 
-1. **A throwaway `HOME`** with `.boxctl/config.json` pointing
+1. **A throwaway `HOME`** with `$HOME/.boxctl/config.json` pointing
    `api_url` at a local port and any `token`, and a hand-written
    `$HOME/.boxctl/backlog.json` with the items and runs you want to show
    (fields are `internal/backlog`'s JSON tags: `next`, `items`, `limits`,
