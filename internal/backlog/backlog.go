@@ -240,9 +240,6 @@ func Path() (string, error) {
 
 // Load reads the backlog at path; an empty one when there's no file yet.
 func Load(path string) (*Backlog, error) {
-	if err := migrate(path); err != nil {
-		return nil, err
-	}
 	q := &Backlog{Limits: DefaultLimits}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -288,9 +285,6 @@ const lockStale = 30 * time.Second
 // backlog add` never write over each other's changes. fn returning an
 // error saves nothing.
 func Update(path string, fn func(q *Backlog) error) error {
-	if err := migrate(path); err != nil {
-		return err
-	}
 	lock := path + ".lock"
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
