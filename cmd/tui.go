@@ -233,6 +233,10 @@ func newTUI(c *client.Client) tuiModel {
 	cmd.Prompt = ""
 	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, queue, create, help, q"
 	cmd.CharLimit = 80
+	// Typing shows the first command the text starts, greyed out after it;
+	// tab takes it, up/down (ctrl-n/ctrl-p) step through the others.
+	cmd.ShowSuggestions = true
+	cmd.SetSuggestions(commandNames())
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: spinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
 	return tuiModel{
