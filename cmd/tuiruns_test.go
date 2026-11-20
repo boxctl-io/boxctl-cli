@@ -204,3 +204,39 @@ func TestBacklogRunsStates(t *testing.T) {
 		t.Errorf("no listing: %q", r[0].state)
 	}
 }
+
+// A run whose box has reported how it ended can't be killed: the next pass
+// records it, with the pull request it opened.
+func TestTUIRunsNoKillAfterTheEnd(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
+	tuiFlashFor = time.Millisecond
+	vms := runsFixture(t)
+	vms[1].RunStatus = json.RawMessage(`{"status":"done","pr_url":"https://github.com/o/r/pull/7"}`)
+	c, calls := fakeBoxServer(t, vms)
+	m := runsTUI(t, c, vms)
+	m.openRuns(3)
+	m.top().selected = "3/3"
+	m, _ = press(t, m, "ctrl+d")
+	if m.dialog != nil || !strings.Contains(m.flash, "already done") || len(*calls) != 0 {
+		t.Errorf("dialog %v, flash %q, calls %v", m.dialog, m.flash, *calls)
+	}
+}
+
+// ITEM sorts by number, not text: #9 before #10.
+func TestTUIRunsSortByItem(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
+	now := time.Now()
+	_ = backlog.Update(mustBacklogPath(), func(q *backlog.Backlog) error {
+		q.Items = []*backlog.Item{
+			{ID: 10, Repo: "o/r", Runs: []backlog.Run{{Kind: backlog.Code, Box: "q10-code-1", Started: now}}},
+			{ID: 9, Repo: "o/r", Runs: []backlog.Run{{Kind: backlog.Code, Box: "q9-code-1", Started: now.Add(-time.Hour)}}},
+		}
+		return nil
+	})
+	m := runsTUI(t, nil, nil)
+	m.openRuns(0)
+	m.top().sortCol = 0
+	if got := keys(m.rows()); got != "9/1 10/1" {
+		t.Errorf("by item = %q", got)
+	}
+}

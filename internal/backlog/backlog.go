@@ -133,13 +133,21 @@ func (it *Item) Used(kind Kind) int {
 }
 
 // Kill ends the item's current run, which must be on box, as killed and
-// leaves the item to you: nothing more runs for it until a retry. The
+// leaves the item to you: nothing more runs for it until a retry. seen is
+// what the box last reported: a pull request it opened is linked here, as
+// a pass would, since the box (the only record of it) is about to go. The
 // caller deletes the box after saving this; the passes delete it too
 // while it's still there, should that fail.
-func Kill(it *Item, box string, now time.Time) error {
+func Kill(it *Item, box string, seen Box, now time.Time) error {
 	r := it.Current()
 	if r == nil || r.Box != box {
 		return fmt.Errorf("#%d has no run going on %s", it.ID, box)
+	}
+	if seen.Branch != "" {
+		it.Branch = seen.Branch
+	}
+	if n := prNumber(seen.PRURL); n > 0 && it.PR == 0 {
+		it.PR = n
 	}
 	r.Ended, r.Outcome = &now, OutcomeKilled
 	setState(it, NeedsYou, fmt.Sprintf("run killed (%s on %s)", r.Kind, box), now)

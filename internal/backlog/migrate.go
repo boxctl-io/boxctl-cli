@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+// movedNote is what migrate leaves in queue.json: a JSON string, which an
+// older boxctl fails to read as its queue.
+const movedNote = `"moved to backlog.json by a newer boxctl: use boxctl backlog"` + "\n"
+
 // migrate moves an older boxctl's state -- ~/.boxctl/queue.json and its
 // run logs in ~/.boxctl/queue/ -- to backlog.json and backlog/ beside
 // path, the first time a backlog file is wanted and there's none yet. A
@@ -35,6 +39,10 @@ func migrate(path string) error {
 	if err != nil {
 		return err
 	}
+	var moved string
+	if json.Unmarshal(data, &moved) == nil {
+		return nil // the tombstone below: moved already
+	}
 	var claim struct {
 		Loop     string    `json:"loop"`
 		LoopSeen time.Time `json:"loop_seen"`
@@ -55,6 +63,10 @@ func migrate(path string) error {
 		}
 		return err
 	}
+	// Leave queue.json unreadable as a queue, so an older boxctl still open
+	// (a tui with nothing to run doesn't hold the loop) fails on it rather
+	// than starting an empty queue there that nothing would read again.
+	_ = os.WriteFile(old, []byte(movedNote), 0o600)
 	logs, newLogs := filepath.Join(dir, "queue"), filepath.Join(dir, "backlog")
 	if _, err := os.Stat(newLogs); errors.Is(err, os.ErrNotExist) {
 		if err := os.Rename(logs, newLogs); err != nil && !errors.Is(err, os.ErrNotExist) {

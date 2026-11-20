@@ -456,7 +456,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   actions out -- tested as tables, keep it free of I/O. `migrate.go`
   moves an older `queue.json` and `queue/` logs over on first use, and
   refuses while an older boxctl still holds that file's loop claim or
-  lock (two loops on two files would launch everything twice); the
+  lock (two loops on two files would launch everything twice), and
+  leaves `queue.json` as a JSON string an older boxctl fails to read (an
+  idle old tui doesn't hold the loop, and would otherwise start an empty
+  queue there); the
   `queued` item state and the `q<id>-` box names kept their old words.
   `backlogdispatch.go` is
   the I/O: a run is `boxctl claude --repo R --box q<id>-<kind>-<n>
@@ -472,7 +475,8 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   for while one is running follows it at once (`backlogPassAgain`), not
   30s later. Follow-up prompts are `backlog.GoalFor`. A kill (ctrl-d in
   `:runs`) is `backlog.Kill` under `Update` first -- outcome `killed`,
-  charged like a failure, the item needs-you -- and only then
+  charged like a failure, the item needs-you, any pull request the box
+  reported linked as a pass would -- and only then
   `Client.Destroy`: the other order lets a pass see the box gone while
   the run is current, call it lost and relaunch it. `Decide` deletes a
   killed run's box on every pass while it's listed, so a failed delete

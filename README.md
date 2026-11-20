@@ -521,7 +521,9 @@ already on boxes carry on while neither is open. The backlog lives in
 Upgrading from a boxctl that had `boxctl queue`: the first backlog
 command moves `~/.boxctl/queue.json` and its logs over, runs in progress
 included. Close the older boxctl's tui or `boxctl queue run` first; the
-move waits until neither holds the old file.
+move waits until neither holds the old file, and leaves a note in
+`queue.json` that an older boxctl fails on rather than starting an empty
+queue there.
 
 It's the boxctl-orchestrator design (boxctl-orchestrator's
 `docs/designs/boxctl_orchestrator.md`), built into the CLI on top of goal

@@ -43,8 +43,20 @@ func TestMigrateCarriesARunningRunOver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "queue.json")); !os.IsNotExist(err) {
-		t.Errorf("queue.json still there: %v", err)
+	// queue.json is left as a note an older boxctl can't read as its queue,
+	// and that isn't moved again.
+	data, err := os.ReadFile(filepath.Join(dir, "queue.json"))
+	if err != nil {
+		t.Fatalf("no note left: %v", err)
+	}
+	if err := json.Unmarshal(data, &Backlog{}); err == nil {
+		t.Errorf("queue.json still reads as a queue: %s", data)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if q, err := Load(path); err != nil || len(q.Items) != 0 {
+		t.Errorf("the note was moved again: %v, %v", q, err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "backlog", "logs", "q5-code-1.log")); err != nil {
 		t.Errorf("log not moved: %v", err)

@@ -358,7 +358,7 @@ func killedCI(t *testing.T) (*Backlog, *Item) {
 		{Kind: Code, Box: "q3-code-1", Started: t0, Launched: true, Ended: &end, Outcome: OutcomeDone},
 		{Kind: CIFix, Box: "q3-ci-2", Started: end, Launched: true},
 	}
-	if err := Kill(it, "q3-ci-2", end.Add(time.Minute)); err != nil {
+	if err := Kill(it, "q3-ci-2", Box{}, end.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	return q, it
@@ -377,12 +377,12 @@ func TestKill(t *testing.T) {
 		t.Errorf("Used(ci_fix) = %d, want the kill charged", it.Used(CIFix))
 	}
 	// Only the run going on that box can be killed.
-	if err := Kill(it, "q3-ci-2", t0); err == nil {
+	if err := Kill(it, "q3-ci-2", Box{}, t0); err == nil {
 		t.Error("killed an ended run")
 	}
 	q := newQ(1)
 	q.Items[0].Runs = []Run{{Kind: Code, Box: "q1-code-1", Started: t0}}
-	if err := Kill(q.Items[0], "q1-code-9", t0); err == nil || q.Items[0].Current() == nil {
+	if err := Kill(q.Items[0], "q1-code-9", Box{}, t0); err == nil || q.Items[0].Current() == nil {
 		t.Errorf("wrong box: %v", err)
 	}
 }
@@ -418,5 +418,21 @@ func TestKilledItemWaitsForRetry(t *testing.T) {
 	acts = Decide(q, Obs{Now: now, Boxes: map[string]Box{}, PRs: pr})
 	if got := kinds(acts); !strings.Contains(strings.Join(got, " "), "launch:q3-ci-3ci_fix") {
 		t.Errorf("after retry: %v", got)
+	}
+}
+
+// A kill links the pull request the box reported, as a pass would: the box
+// is about to go, and a retry without it would open a second one.
+func TestKillLinksTheBoxsPR(t *testing.T) {
+	q := newQ(1)
+	it := q.Items[0]
+	it.State = Active
+	it.Runs = []Run{{Kind: Code, Box: "q1-code-1", Started: t0, Launched: true}}
+	seen := Box{State: "running", Status: "running", PRURL: "https://github.com/o/ra/pull/12", Branch: "boxctl/x"}
+	if err := Kill(it, "q1-code-1", seen, t0); err != nil {
+		t.Fatal(err)
+	}
+	if it.PR != 12 || it.Branch != "boxctl/x" {
+		t.Errorf("PR %d, branch %q", it.PR, it.Branch)
 	}
 }

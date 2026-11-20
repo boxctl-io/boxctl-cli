@@ -25,7 +25,8 @@ var runsView = &tableView{
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow
 		for _, r := range m.runRows() {
-			rows = append(rows, tableRow{key: r.key(), cells: r.cells(), state: r.state})
+			rows = append(rows, tableRow{key: r.key(), cells: r.cells(), state: r.state,
+				sortKeys: []string{fmt.Sprintf("%08d/%04d", r.it.ID, r.n), "", "", "", "", fmt.Sprintf("%020d", r.run.Started.Unix())}})
 		}
 		return rows
 	},
@@ -96,6 +97,11 @@ func (m tuiModel) handleRunsKey(key string) (tea.Model, tea.Cmd, bool) {
 		if r.run.Ended != nil {
 			return m, m.fail("#%d's %s run already ended %s", r.it.ID, r.run.Kind, r.run.Outcome), true
 		}
+		if r.state == "done" || r.state == "failed" {
+			// The box has reported how it ended; the next pass records it
+			// (and links its pull request).
+			return m, m.fail("#%d's %s run already %s", r.it.ID, r.run.Kind, r.state), true
+		}
 		md, cmd := m.askKill(*r)
 		return md, cmd, true
 	}
@@ -119,6 +125,7 @@ func noRunBox(r backlogRun) string {
 // box deleted. A failed delete leaves the box to the next pass.
 func (m tuiModel) askKill(r backlogRun) (tea.Model, tea.Cmd) {
 	id, box, kind := r.it.ID, r.run.Box, r.run.Kind
+	seen := backlogBoxes(m.vms)[box]
 	body := []string{
 		"Its box is deleted, with whatever is on it.",
 		fmt.Sprintf("#%d then waits for you: nothing more runs for it until r (retry) in :backlog.", id),
@@ -131,7 +138,7 @@ func (m tuiModel) askKill(r backlogRun) (tea.Model, tea.Cmd) {
 				if it == nil {
 					return fmt.Errorf("no backlog item #%d", id)
 				}
-				return backlog.Kill(it, box, time.Now())
+				return backlog.Kill(it, box, seen, time.Now())
 			})
 			if err != nil {
 				return err
