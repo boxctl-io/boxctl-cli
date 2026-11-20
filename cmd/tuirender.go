@@ -430,7 +430,11 @@ func (m tuiModel) dialogTitleAndLines(w, inner int) (string, []string) {
 	body = append(body, d.body...)
 	body = append(body, "")
 	if d.input != nil {
-		body = append(body, d.input.View(), "", k9s.hotKey.Render("<enter>")+" ok   "+k9s.hotKey.Render("<esc>")+" cancel")
+		body = append(body, d.input.View())
+		if d.choices != nil {
+			body = append(body, d.choiceLines(&m)...)
+		}
+		body = append(body, "", k9s.hotKey.Render("<enter>")+" ok   "+k9s.hotKey.Render("<esc>")+" cancel")
 	} else {
 		body = append(body, k9s.hotKey.Render("<y>")+" yes   "+k9s.hotKey.Render("<n>")+" no")
 	}
@@ -455,6 +459,43 @@ func (m tuiModel) dialogTitleAndLines(w, inner int) (string, []string) {
 	}
 	title := k9s.title.Render(m.pageTitle())
 	return title, lines
+}
+
+// dialogChoicesShown is how many of a prompt's matching choices show at once.
+const dialogChoicesShown = 8
+
+// choiceLines are a prompt's matching choices under its input: a window
+// of them around the selected one (highlighted), with how many more
+// there are above and below.
+func (d *tuiDialog) choiceLines(m *tuiModel) []string {
+	matches := d.matches(m)
+	if len(matches) == 0 {
+		if len(d.choices(m)) == 0 && m.loading["repos"] {
+			return []string{k9s.dim.Render("  loading repositories...")}
+		}
+		return []string{k9s.dim.Render("  no matches")}
+	}
+	sel := min(d.sel, len(matches)-1)
+	top := 0
+	if sel >= dialogChoicesShown {
+		top = sel - dialogChoicesShown + 1
+	}
+	end := min(top+dialogChoicesShown, len(matches))
+	var lines []string
+	if top > 0 {
+		lines = append(lines, k9s.dim.Render(fmt.Sprintf("  ↑ %d more", top)))
+	}
+	for i := top; i < end; i++ {
+		if i == sel {
+			lines = append(lines, k9s.selected.Render("▸ "+matches[i]+" "))
+		} else {
+			lines = append(lines, "  "+matches[i])
+		}
+	}
+	if end < len(matches) {
+		lines = append(lines, k9s.dim.Render(fmt.Sprintf("  ↓ %d more", len(matches)-end)))
+	}
+	return lines
 }
 
 // pageTitle is the top page's own title, for a dialog over it.

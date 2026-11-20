@@ -448,7 +448,13 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   (`isRefusal` matches `internal/client`'s `refusalMessage` text) drops
   the run uncharged and backs off. The passes run in the tui every
   `queuePassEvery` (any view) or in `boxctl queue run`; `Queue.Claim`
-  keeps it to one loop. Follow-up prompts are `queue.GoalFor`.
+  keeps it to one loop. Follow-up prompts are `queue.GoalFor`. `:queue`'s
+  `a` asks for the repository from a list (`queueRepoChoices`: the current
+  item's, the queued ones, then `:repos`' cache, loaded through
+  `listRepos`): a prompt with `tuiDialog.choices` shows the matches under
+  its input (`matches`: prefix, then name-after-owner prefix, then
+  substring), up/down selects, tab completes, and enter takes the
+  selection unless an owner/name was typed (`tuiDialog.value`).
 - `cmd/imagepick.go` — the image of a new agent box: `--image`, else the
   stack (`stacks`, `stackOfFiles`) matched against `/api/images`
   (`pickImage`), else `claude-agent`; `sayNote` prints which and why.

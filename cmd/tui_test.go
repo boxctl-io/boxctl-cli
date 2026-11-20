@@ -152,6 +152,8 @@ func press(t *testing.T, m tuiModel, key string) (tuiModel, tea.Cmd) {
 		msg = tea.KeyMsg{Type: tea.KeyTab}
 	case "down":
 		msg = tea.KeyMsg{Type: tea.KeyDown}
+	case "up":
+		msg = tea.KeyMsg{Type: tea.KeyUp}
 	case "home":
 		msg = tea.KeyMsg{Type: tea.KeyHome}
 	default:
