@@ -12,7 +12,7 @@ import (
 
 // A multiplexer keeps an agent's session running on the box between
 // attaches -- across a detach, a dropped connection, a --detach start.
-// herdr (herdr.dev) is claude's default, tmux kilo's; --mux picks either.
+// herdr (herdr.dev) is the default; --mux tmux picks tmux.
 // herdr is a terminal workspace manager made for coding agents, which
 // tells a working one from a blocked one from an idle one, and shows
 // every task on the box in one window. Which one a box uses is recorded on it
@@ -67,7 +67,7 @@ func muxNamed(name string) (multiplexer, error) {
 }
 
 // defaultMux is a's --mux default: BOXCTL_MUX, else the agent's own
-// (herdr for claude, tmux for kilo).
+// (herdr for claude).
 func (a *boxAgent) defaultMux() string {
 	if v := os.Getenv(muxEnv); v != "" {
 		return v

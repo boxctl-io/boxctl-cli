@@ -69,8 +69,8 @@ every target; it needs `goreleaser` on PATH.
 Tests are few -- this is a thin, mostly-I/O client -- and cover the
 pure parts (`go test ./...`: `boxctl claude`'s file selection, tar
 stream, settings filtering and shell quoting, reconnecting after a dropped connection (a fake
-`ssh` on PATH), the herdr start script (a fake `herdr` on PATH), `boxctl kilo`'s
-credential environment, `internal/client`'s messages for boxctl-vms's
+`ssh` on PATH), the herdr start script (a fake `herdr` on PATH),
+`internal/client`'s messages for boxctl-vms's
 409 `box_limit` / 503 `capacity` refusals). Otherwise rely on `go
 vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
 ...`) for changes.
@@ -303,8 +303,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `cmd/claudeimports.go`: `copyClaudeConfig` also sends the files `~/.claude/CLAUDE.md`
   imports with `@path` (`importedConfigFiles`: relative to the importing file,
   `~/`, 5 levels, loops ignored, code spans/blocks skipped), only regular files
-  under `~/.claude` and never an excluded path; others warn. `kilo` copies
-  its own `AGENTS.md` verbatim and has no such import step.
+  under `~/.claude` and never an excluded path; others warn.
   `cmd/claudegithub.go` is its GitHub side: `--github store` (the
   default) logs a token into the box's gh (`gh auth login --with-token`,
   then `gh auth setup-git`) before the project goes there, so a private
@@ -346,8 +345,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `cmd/mux.go` is what keeps that session alive on the box between
   attaches: the `multiplexer` interface (start-or-attach, detached
   start, running check, listing for `claude ls`, install), `herdrMux`
-  and `tmuxMux` (`--mux`, `BOXCTL_MUX`, else `boxAgent.mux`: herdr for
-  `claude` -- and so the tui's `:repos` -- tmux for `kilo`), read from
+  and `tmuxMux` (`--mux`, `BOXCTL_MUX`, else `boxAgent.mux`: herdr), read from
   the `mux` global that `boxAgent.runs` sets. tmux: one session per
   `taskSession`, always `tmux ... -t =<name>` -- a bare `-t claude`
   prefix-matches `claude-auth`. herdr (verified against 0.9.5, which
@@ -521,7 +519,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   built-in too, unless `~/.boxctl/harness/pr-only` exists -- yours wins.
   A harness with only a `model.json` (`!harness.rules()`) never replaces
   an unattended run's rules: `withRules` loads the built-in in its place
-  with its model (`harness.modelFrom` names where that came from). `kilo` has no `--harness`: `/etc/claude-code` is Claude's.
+  with its model (`harness.modelFrom` names where that came from).
 - `cmd/claudemodel.go` — `claude --model/--effort`: passed to claude on
   the box as its own `--model`/`--effort` flags (`modelChoice.args`,
   prepended to the passthrough args: the goal runner's `claude -p` line
@@ -542,39 +540,15 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   session starts there -- not to a box this run created
   (`claudeTarget.created`) -- (`boxctl.model`, `boxctl.effort`); `modelText` reads them for `claude ls`'s MODEL
   column (`printBoxes`'s `model` argument; `boxctl ls` has none) and
-  `claude status`'s Model line. `boxAgent.runs` resets `runModel`, so
-  kilo has none.
-- `cmd/agent.go`, `cmd/kilo.go` — `kilo`: the same for the Kilo CLI.
-  A `boxAgent` is the little that differs between the two (name -- also
-  the box prefix and the session's name -- binary, install dir, installer,
-  how a first prompt is passed); everything in `claude*.go` that isn't
-  Claude's own (config, token, handoff) reads the running command's
-  agent from the `agent` global, which each command's `RunE` sets through
-  `boxAgent.runs`. Both commands bind the same flag variables
-  (`boxAgent.addFlags`) and get their `ls`/`fetch`/`push` from
-  `lsCmd`/`fetchCmd`/`pushCmd`; `openSession` and `startSession` are the
-  shared start and end of a run. Kilo's own: `~/.config/kilo` copied
-  verbatim (it's JSONC -- don't parse it), and credentials as
-  environment in the same tmpfs env file as Claude's token --
-  `auth.json` as `KILO_AUTH_CONTENT`, plus the `{env:NAME}` variables the
-  config refers to and any `--env NAME`. A third agent (opencode, which
-  Kilo is a fork of) is another `boxAgent` and a file like `kilo.go`.
-  `kilo --handoff <session-id>` (`cmd/kilosession.go`, design in
-  `docs/plans/kilo-handoff.md`): `runKilo` first calls
-  `checkKiloHandoffFlags` (refuses `--repo/--goal/--issue/--task/--own-box/--prompt`
-  and `--continue/-c/--session/-s/--fork` after `--`), then
-  `findKiloSession` -- before any box exists -- looks the ID up (a unique
-  prefix is enough, an ambiguous one is refused) with `kilo db`, runs
-  `kilo export`, and `checkKiloExport` refuses anything but `{info,
-  messages}` or containing a value of `auth.json`. After `openSession`,
-  a boxctl session already running is refused, then `checkNoKiloOnBox`
-  (`pgrep -x kilo`; no `pgrep` counts as an error). `copyKiloSession`
-  sends only the export over ssh stdin to a file under `/run/boxctl`
-  (`kiloHandoffDir`), `kilo import` runs in the project directory (it
-  takes project and directory from where it runs), the file is removed
-  whatever happens, and `kiloResumeArgs` starts Kilo with `--session <id>`.
-  Never copy Kilo's database (it holds credentials). The "local changes
-  aren't on the box" hint is shared with `claude` and names `agent.name`'s `push`.
+  `claude status`'s Model line. `boxAgent.runs` resets `runModel`.
+- `cmd/agent.go` — a `boxAgent` is what is Claude's own in a run (name
+  -- also the box prefix and the session's name -- binary, install dir,
+  installer, how a first prompt is passed); everything else in
+  `claude*.go` reads the running command's agent from the `agent`
+  global, which the command's `RunE` sets through `boxAgent.runs`.
+  `openSession` and `startSession` are the start and end of a run. A
+  second agent would be another `boxAgent` and a command binding the
+  same flags (`boxAgent.addFlags`, `lsCmd`/`fetchCmd`/`pushCmd`).
 - `cmd/backups.go`/`restore.go` — `backups` (GET /api/backups) and
   `restore <backup> [--name] [--size]` (POST
   /api/backups/{id}/restore, then the same import poll as `import`).
@@ -696,5 +670,4 @@ above.
   CI runs on every pull request" under Build & run.
 - Hosted names are settings: API URL (`--api-url`/`BOXCTL_API_URL`/`api_url`), dashboard origin (`BOXCTL_DASHBOARD_URL`/`dashboard_url`, `dashboardBase` in `cmd/root.go`); `newBoxSSH`'s ProxyCommand carries `--api-url`. Don't hard-code a boxctl.io name in user-facing text.
 - `cp_sshd_test.go` needs `sshd`, `scp` and `ssh-keygen` (apt `openssh-server`); without them it skips, so CI passing doesn't prove a real copy works.
-- `kilo` isn't needed for `go test`, but `TestKiloRoundTrip` (cmd/kilosession_test.go) runs against a real one when `kilo` or `~/.kilo/bin/kilo` exists; without it that test skips.
 - A process left running on a box by a command over ssh must have the whole backgrounded subshell's stdio redirected -- `(cd / && exec setsid x) >/dev/null 2>&1 </dev/null &` -- not only its own: `(setsid x >/dev/null &)` leaves a subshell waiting on it with the session's output open, and the ssh (a goal's launch) never returns. `TestHerdrStartDetached` checks it.

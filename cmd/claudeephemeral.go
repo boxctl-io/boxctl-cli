@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// An ephemeral run -- boxctl claude (or kilo) without --keep, --box,
+// An ephemeral run -- boxctl claude without --keep, --box,
 // --detach or --task -- gets a box of its own, created for this run and
 // deleted when it ends: the session quits or setup fails.
 // Not when you detach or the connection drops (that's reconnected, and if

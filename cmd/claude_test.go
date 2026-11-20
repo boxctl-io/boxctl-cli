@@ -240,7 +240,7 @@ func TestBoxSettingsDropsMachineSpecificKeys(t *testing.T) {
 
 // Every agent's box is ai-sandbox unless --size says otherwise.
 func TestAgentDefaultSize(t *testing.T) {
-	for _, a := range []*boxAgent{claudeAgent, kiloAgent} {
+	for _, a := range []*boxAgent{claudeAgent} {
 		c := &cobra.Command{Use: a.name}
 		a.addFlags(c)
 		if got := c.Flags().Lookup("size").DefValue; got != "ai-sandbox" {
