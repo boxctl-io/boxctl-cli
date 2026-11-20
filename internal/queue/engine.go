@@ -86,7 +86,10 @@ func Decide(q *Queue, o Obs) []Action {
 	// 1. Follow each run.
 	if o.Boxes != nil {
 		for _, it := range q.Items {
-			if r := it.Current(); r != nil && !o.Launching[r.Box] {
+			// A run still launching here is left to its launch -- unless
+			// its box already reports the run: Claude started, whether or
+			// not boxctl claude has returned yet.
+			if r := it.Current(); r != nil && (!o.Launching[r.Box] || o.Boxes[r.Box].Status != "") {
 				acts = append(acts, followRun(it, r, o)...)
 			}
 		}
@@ -168,17 +171,23 @@ func followRun(it *Item, r *Run, o Obs) []Action {
 		r.Ended, r.Outcome, r.Error = &t, outcome, why
 		it.Updated = now
 	}
+	if ok && b.Status != "" {
+		// The box reports the run, so Claude started on it: whatever
+		// became of the boxctl claude that launched it (a tui closed while
+		// it ran, or one that never returned), follow the box.
+		r.Launched = true
+	}
 	switch {
-	case !r.Launched && !ok:
-		// boxctl claude isn't running (not in Launching) and never said
-		// it was done: it died with the process that ran it.
-		end(OutcomeLost, "the launch was interrupted")
-		return nil
-	case !r.Launched:
-		end(OutcomeLost, "the launch was interrupted")
-		return []Action{{Kind: RemoveBox, Item: it.ID, Box: r.Box}}
-	case !ok:
+	case !ok && r.Launched:
 		end(OutcomeLost, "its box is gone")
+		return nil
+	case !ok && now.Sub(r.Started) > LaunchGrace:
+		end(OutcomeLost, "the launch never made its box")
+		return nil
+	case !ok:
+		// Not launching in this process, and no box yet: a launch from
+		// a tui since closed may still be making it.
+		setNote(it, "waiting for "+r.Box+" to appear", now)
 		return nil
 	}
 	if b.Branch != "" {
