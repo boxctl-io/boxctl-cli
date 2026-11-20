@@ -217,20 +217,14 @@ var queueLimitCmd = &cobra.Command{
 	Short: "Show or set how many runs go at once",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var l queue.Limits
-		err := queue.Update(mustQueuePath(), func(q *queue.Queue) error {
-			if cmd.Flags().Changed("global") {
-				q.Limits.Global = queueGlobal
-			}
-			if cmd.Flags().Changed("per-repo") {
-				q.Limits.PerRepo = queuePerRepo
-			}
-			if q.Limits.Global < 1 || q.Limits.PerRepo < 1 {
-				return errors.New("a limit is at least 1")
-			}
-			l = q.Limits
-			return nil
-		})
+		var global, perRepo *int
+		if cmd.Flags().Changed("global") {
+			global = &queueGlobal
+		}
+		if cmd.Flags().Changed("per-repo") {
+			perRepo = &queuePerRepo
+		}
+		l, err := setQueueLimits(global, perRepo)
 		if err != nil {
 			return err
 		}
@@ -283,6 +277,26 @@ func addQueueItem(repo, goal, model string, priority int) (*queue.Item, error) {
 }
 
 // changeQueueItem applies fn to item id under the queue's lock.
+// setQueueLimits sets the limits given (nil leaves one as it is) and
+// returns them all: `queue limit` and :queue's L.
+func setQueueLimits(global, perRepo *int) (queue.Limits, error) {
+	var l queue.Limits
+	err := queue.Update(mustQueuePath(), func(q *queue.Queue) error {
+		if global != nil {
+			q.Limits.Global = *global
+		}
+		if perRepo != nil {
+			q.Limits.PerRepo = *perRepo
+		}
+		if q.Limits.Global < 1 || q.Limits.PerRepo < 1 {
+			return errors.New("a limit is at least 1")
+		}
+		l = q.Limits
+		return nil
+	})
+	return l, err
+}
+
 func changeQueueItem(id int, fn func(it *queue.Item) error) error {
 	return queue.Update(mustQueuePath(), func(q *queue.Queue) error {
 		it := q.Item(id)

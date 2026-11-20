@@ -461,6 +461,9 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   its input (`matches`: prefix, then name-after-owner prefix, then
   substring), up/down selects, tab completes, and enter takes the
   selection unless an owner/name was typed (`tuiDialog.value`).
+  `:queue`'s `L` sets the slot limit (`queue limit`'s `setQueueLimits`):
+  `3` for runs at once in all, `3 2` for per repository too
+  (`parseQueueLimit`).
   `:queue`'s `o` is `cmd/prtab.go`'s `openPR`: on a Mac with Chrome
   running, an AppleScript loads the PR into the one tab it used last
   (its Chrome id in `~/.boxctl/pr-tab`, reused only while still on
