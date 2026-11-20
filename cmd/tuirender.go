@@ -220,8 +220,8 @@ func (m tuiModel) infoBlock() []string {
 		status = m.spin.View() + " " + refreshed
 	}
 	showing := kv("Showing", m.stateFilter.String())
-	if t := m.top(); t.kind == pageTable && t.view == queueView {
-		showing = kv("Queue", m.queueSummary())
+	if t := m.top(); t.kind == pageTable && t.view == backlogView {
+		showing = kv("Backlog", m.backlogSummary())
 	}
 	return []string{
 		kv("API", host),

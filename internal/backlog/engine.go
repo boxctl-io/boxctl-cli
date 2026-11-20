@@ -1,4 +1,4 @@
-package queue
+package backlog
 
 import (
 	"fmt"
@@ -57,7 +57,7 @@ const (
 	UpdateBranch ActionKind = "update_branch" // bring PR's branch up to date with its base, expecting SHA
 )
 
-// Action is a side effect Decide asks for; the queue's own state
+// Action is a side effect Decide asks for; the backlog's own state
 // changes it has already made.
 type Action struct {
 	Kind   ActionKind
@@ -80,7 +80,7 @@ const FreshChecks = 3 * time.Minute
 // Decide is one pass: it updates q from o -- runs ended, PRs linked,
 // items done or needing you, new runs planned -- and returns what to do
 // about it, in order.
-func Decide(q *Queue, o Obs) []Action {
+func Decide(q *Backlog, o Obs) []Action {
 	var acts []Action
 	now := o.Now
 	// 1. Follow each run.
@@ -116,15 +116,22 @@ func Decide(q *Queue, o Obs) []Action {
 			wants = append(wants, want{it, Code, nil})
 		}
 	}
-	// 3. Done and cancelled items keep no boxes.
+	// 3. Done and cancelled items keep no boxes, nor does a killed run,
+	// whose box may have outlived the kill (deleting it then failed).
 	if o.Boxes != nil {
 		for _, it := range q.Items {
 			if it.State == Done || it.State == Cancelled {
 				acts = append(acts, removeBoxes(it, o, "")...)
+				continue
+			}
+			for _, r := range it.Runs {
+				if _, ok := o.Boxes[r.Box]; ok && r.Outcome == OutcomeKilled {
+					acts = append(acts, Action{Kind: RemoveBox, Item: it.ID, Box: r.Box})
+				}
 			}
 		}
 	}
-	// 4. Start what there's room for: follow-ups first, then the queue.
+	// 4. Start what there's room for: follow-ups first, then the backlog.
 	active, perRepo := 0, map[string]int{}
 	for _, it := range q.Items {
 		if it.Current() != nil {

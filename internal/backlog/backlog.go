@@ -1,19 +1,19 @@
-// Package queue is the work queue behind `boxctl queue` and the tui's
-// :queue view: goals waiting to become pull requests, each worked on by
+// Package backlog is the work backlog behind `boxctl backlog` and the tui's
+// :backlog view: goals waiting to become pull requests, each worked on by
 // one unattended `boxctl claude --goal` run at a time, with follow-up
 // runs on the pull request's branch (`--pr`) when its CI fails or it
 // conflicts with its base. It's the boxctl-orchestrator design
 // (boxctl-orchestrator's docs/designs/boxctl_orchestrator.md) built into
 // the CLI on top of what goal runs already do.
 //
-// The queue file (~/.boxctl/queue.json) holds only what boxctl and
+// The backlog file (~/.boxctl/backlog.json) holds only what boxctl and
 // GitHub don't know: the goals, their order, which runs belong to which
 // item, and what was already tried. Everything else -- how a run is
 // going (the box's run_status), the pull request's state, its checks --
 // is asked for again on every pass. Decide (engine.go) is the pure part:
-// the queue and one pass's observations in, the state changes made and
+// the backlog and one pass's observations in, the state changes made and
 // the actions to take out.
-package queue
+package backlog
 
 import (
 	"encoding/json"
@@ -51,6 +51,7 @@ const (
 	OutcomeDone   = "done"   // the runner said done (a PR exists)
 	OutcomeFailed = "failed" // the runner said failed, or the launch failed
 	OutcomeLost   = "lost"   // the box went, or stopped, without a final status: not charged
+	OutcomeKilled = "killed" // you killed it: charged, and the item waits for you
 )
 
 // DefaultBudget is how many runs of each kind an item gets before it
@@ -131,6 +132,20 @@ func (it *Item) Used(kind Kind) int {
 	return n
 }
 
+// Kill ends the item's current run, which must be on box, as killed and
+// leaves the item to you: nothing more runs for it until a retry. The
+// caller deletes the box after saving this; the passes delete it too
+// while it's still there, should that fail.
+func Kill(it *Item, box string, now time.Time) error {
+	r := it.Current()
+	if r == nil || r.Box != box {
+		return fmt.Errorf("#%d has no run going on %s", it.ID, box)
+	}
+	r.Ended, r.Outcome, r.Error = &now, OutcomeKilled, "killed"
+	setState(it, NeedsYou, fmt.Sprintf("run killed (%s on %s)", r.Kind, box), now)
+	return nil
+}
+
 // Budget is how many runs of each kind it may have.
 func (it *Item) Budget() int { return DefaultBudget + it.Extra }
 
@@ -149,12 +164,12 @@ type Limits struct {
 	PerRepo int `json:"per_repo"`
 }
 
-// DefaultLimits are a new queue's: an account has 2 active boxes unless
+// DefaultLimits are a new backlog's: an account has 2 active boxes unless
 // its limit was raised, and a run's box is one of them.
 var DefaultLimits = Limits{Global: 2, PerRepo: 2}
 
-// Queue is the file.
-type Queue struct {
+// Backlog is the file.
+type Backlog struct {
 	Next   int     `json:"next"`
 	Items  []*Item `json:"items"`
 	Limits Limits  `json:"limits"`
@@ -162,14 +177,14 @@ type Queue struct {
 	// limit, or no room on the fleet), until it passes.
 	Backoff    time.Time `json:"backoff,omitempty"`
 	BackoffWhy string    `json:"backoff_why,omitempty"`
-	// Loop is who runs the passes (a tui or `boxctl queue run`) and when
+	// Loop is who runs the passes (a tui or `boxctl backlog dispatch`) and when
 	// it last did one, so a second one doesn't run them too.
 	Loop     string    `json:"loop,omitempty"`
 	LoopSeen time.Time `json:"loop_seen,omitempty"`
 }
 
 // Add queues a goal and returns it.
-func (q *Queue) Add(repo, goal, model string, priority int, now time.Time) *Item {
+func (q *Backlog) Add(repo, goal, model string, priority int, now time.Time) *Item {
 	q.Next++
 	it := &Item{ID: q.Next, Repo: repo, Goal: goal, Model: model, Priority: priority, State: Queued, Created: now, Updated: now}
 	q.Items = append(q.Items, it)
@@ -177,7 +192,7 @@ func (q *Queue) Add(repo, goal, model string, priority int, now time.Time) *Item
 }
 
 // Item finds id, nil when there's none.
-func (q *Queue) Item(id int) *Item {
+func (q *Backlog) Item(id int) *Item {
 	for _, it := range q.Items {
 		if it.ID == id {
 			return it
@@ -188,7 +203,7 @@ func (q *Queue) Item(id int) *Item {
 
 // Sorted is the items in the order they're shown and dispatched: open
 // ones first (active, needs you, queued), highest priority, oldest.
-func (q *Queue) Sorted() []*Item {
+func (q *Backlog) Sorted() []*Item {
 	items := append([]*Item(nil), q.Items...)
 	rank := map[State]int{Active: 0, NeedsYou: 1, Queued: 2, Done: 3, Cancelled: 4}
 	sort.SliceStable(items, func(i, j int) bool {
@@ -206,18 +221,21 @@ func (q *Queue) Sorted() []*Item {
 
 // --- the file ---------------------------------------------------------------
 
-// Path is ~/.boxctl/queue.json.
+// Path is ~/.boxctl/backlog.json.
 func Path() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".boxctl", "queue.json"), nil
+	return filepath.Join(home, ".boxctl", "backlog.json"), nil
 }
 
-// Load reads the queue at path; an empty one when there's no file yet.
-func Load(path string) (*Queue, error) {
-	q := &Queue{Limits: DefaultLimits}
+// Load reads the backlog at path; an empty one when there's no file yet.
+func Load(path string) (*Backlog, error) {
+	if err := migrate(path); err != nil {
+		return nil, err
+	}
+	q := &Backlog{Limits: DefaultLimits}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return q, nil
@@ -238,7 +256,7 @@ func Load(path string) (*Queue, error) {
 }
 
 // save writes q to path atomically (a temporary file, then a rename).
-func save(path string, q *Queue) error {
+func save(path string, q *Backlog) error {
 	data, err := json.MarshalIndent(q, "", "  ")
 	if err != nil {
 		return err
@@ -257,11 +275,14 @@ func save(path string, q *Queue) error {
 // that died holding it: Update holds it for milliseconds.
 const lockStale = 30 * time.Second
 
-// Update loads the queue, lets fn change it and saves it, holding a lock
-// file (path.lock) throughout, so a tui, `boxctl queue run` and `boxctl
-// queue add` never write over each other's changes. fn returning an
+// Update loads the backlog, lets fn change it and saves it, holding a lock
+// file (path.lock) throughout, so a tui, `boxctl backlog dispatch` and `boxctl
+// backlog add` never write over each other's changes. fn returning an
 // error saves nothing.
-func Update(path string, fn func(q *Queue) error) error {
+func Update(path string, fn func(q *Backlog) error) error {
+	if err := migrate(path); err != nil {
+		return err
+	}
 	lock := path + ".lock"
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
@@ -281,7 +302,7 @@ func Update(path string, fn func(q *Queue) error) error {
 			continue
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("the queue is locked (%s); remove it if no boxctl is running", lock)
+			return fmt.Errorf("the backlog is locked (%s); remove it if no boxctl is running", lock)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
@@ -300,9 +321,9 @@ func Update(path string, fn func(q *Queue) error) error {
 // take over: a tui closed, a laptop asleep.
 const LoopStale = 2 * time.Minute
 
-// Claim makes owner the queue's loop, unless another one ran a pass
+// Claim makes owner the backlog's loop, unless another one ran a pass
 // within LoopStale; it returns who holds it then.
-func (q *Queue) Claim(owner string, now time.Time) (holder string, ok bool) {
+func (q *Backlog) Claim(owner string, now time.Time) (holder string, ok bool) {
 	if q.Loop != "" && q.Loop != owner && now.Sub(q.LoopSeen) < LoopStale {
 		return q.Loop, false
 	}
@@ -311,7 +332,7 @@ func (q *Queue) Claim(owner string, now time.Time) (holder string, ok bool) {
 }
 
 // Release gives the loop up, so the next one needn't wait LoopStale.
-func (q *Queue) Release(owner string) {
+func (q *Backlog) Release(owner string) {
 	if q.Loop == owner {
 		q.Loop, q.LoopSeen = "", time.Time{}
 	}

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boxctl-io/boxctl-cli/internal/backlog"
 	"github.com/boxctl-io/boxctl-cli/internal/client"
-	"github.com/boxctl-io/boxctl-cli/internal/queue"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -51,18 +51,18 @@ func TestParsePR(t *testing.T) {
 	}
 }
 
-func TestQueueLaunchArgs(t *testing.T) {
-	got := strings.Join(queueLaunchArgs(queue.Action{Repo: "o/r", Box: "q1-ci-2", Item: 1, Run: queue.CIFix, PR: 7, Goal: "fix", Model: "opus"}), " ")
-	if got != "claude --repo o/r --box q1-ci-2 --queue-item 1 --goal fix --pr 7 --model opus" {
+func TestBacklogLaunchArgs(t *testing.T) {
+	got := strings.Join(backlogLaunchArgs(backlog.Action{Repo: "o/r", Box: "q1-ci-2", Item: 1, Run: backlog.CIFix, PR: 7, Goal: "fix", Model: "opus"}), " ")
+	if got != "claude --repo o/r --box q1-ci-2 --backlog-item 1 --goal fix --pr 7 --model opus" {
 		t.Errorf("follow-up: %s", got)
 	}
-	if got := strings.Join(queueLaunchArgs(queue.Action{Repo: "o/r", Box: "q1-code-1", Item: 1, Run: queue.Code, Goal: "g"}), " "); strings.Contains(got, "--pr") {
+	if got := strings.Join(backlogLaunchArgs(backlog.Action{Repo: "o/r", Box: "q1-code-1", Item: 1, Run: backlog.Code, Goal: "g"}), " "); strings.Contains(got, "--pr") {
 		t.Errorf("code run: %s", got)
 	}
 }
 
-// queueServer is a box API whose boxes the test changes between passes.
-func queueServer(t *testing.T) (*client.Client, func([]client.VM), *[]string) {
+// backlogServer is a box API whose boxes the test changes between passes.
+func backlogServer(t *testing.T) (*client.Client, func([]client.VM), *[]string) {
 	t.Helper()
 	var mu sync.Mutex
 	var vms []client.VM
@@ -81,7 +81,7 @@ func queueServer(t *testing.T) (*client.Client, func([]client.VM), *[]string) {
 	return client.New(srv.URL, "tok"), func(v []client.VM) { mu.Lock(); vms = v; mu.Unlock() }, &calls
 }
 
-func stubQueue(t *testing.T, launch func(args []string) (string, error), gh func(args []string) ([]byte, error)) {
+func stubBacklog(t *testing.T, launch func(args []string) (string, error), gh func(args []string) ([]byte, error)) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	oldL, oldG := launchCommand, ghRun
@@ -90,10 +90,10 @@ func stubQueue(t *testing.T, launch func(args []string) (string, error), gh func
 	t.Cleanup(func() { launchCommand, ghRun = oldL, oldG })
 }
 
-func TestQueuePass(t *testing.T) {
+func TestBacklogPass(t *testing.T) {
 	var mu sync.Mutex
 	var launched, ghCalls []string
-	stubQueue(t, func(args []string) (string, error) {
+	stubBacklog(t, func(args []string) (string, error) {
 		mu.Lock()
 		launched = append(launched, strings.Join(args, " "))
 		mu.Unlock()
@@ -107,11 +107,11 @@ func TestQueuePass(t *testing.T) {
 		}
 		return nil, nil
 	})
-	c, setVMs, calls := queueServer(t)
-	if _, err := addQueueItem("o/r", "fix the bug", "", 0); err != nil {
+	c, setVMs, calls := backlogServer(t)
+	if _, err := addBacklogItem("o/r", "fix the bug", "", 0); err != nil {
 		t.Fatal(err)
 	}
-	r, err := newQueueRunner(c)
+	r, err := newBacklogRunner(c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,15 +122,15 @@ func TestQueuePass(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.wg.Wait()
-	if len(launched) != 1 || !strings.Contains(launched[0], "--box q1-code-1 --queue-item 1 --goal fix the bug") {
+	if len(launched) != 1 || !strings.Contains(launched[0], "--box q1-code-1 --backlog-item 1 --goal fix the bug") {
 		t.Fatalf("launched = %v", launched)
 	}
-	q, _ := loadQueue()
-	if it := q.Item(1); it.State != queue.Active || it.Current() == nil || !it.Current().Launched {
+	q, _ := loadBacklog()
+	if it := q.Item(1); it.State != backlog.Active || it.Current() == nil || !it.Current().Launched {
 		t.Fatalf("after launch: %+v", it)
 	}
-	// A second loop is refused while this one holds the queue.
-	other, _ := newQueueRunner(c)
+	// A second loop is refused while this one holds the backlog.
+	other, _ := newBacklogRunner(c)
 	other.owner = "elsewhere"
 	if _, err := other.pass(ctx); !errors.As(err, new(errLoopHeld)) {
 		t.Errorf("second loop: %v", err)
@@ -144,7 +144,7 @@ func TestQueuePass(t *testing.T) {
 	if _, err := r.pass(ctx); err != nil {
 		t.Fatal(err)
 	}
-	q, _ = loadQueue()
+	q, _ = loadBacklog()
 	it := q.Item(1)
 	if it.PR != 5 || it.Branch != "boxctl/fix-1" || !slices.Contains(ghCalls, "run rerun 11 --failed -R o/r") {
 		t.Fatalf("after CI failed: PR %d, branch %q, gh %v", it.PR, it.Branch, ghCalls)
@@ -161,71 +161,71 @@ func TestQueuePass(t *testing.T) {
 		t.Errorf("calls = %v", *calls)
 	}
 	r.release()
-	if q, _ = loadQueue(); q.Loop != "" {
+	if q, _ = loadBacklog(); q.Loop != "" {
 		t.Errorf("loop not released: %q", q.Loop)
 	}
 }
 
-func TestQueueLaunchRefusedAndFailed(t *testing.T) {
+func TestBacklogLaunchRefusedAndFailed(t *testing.T) {
 	answer := "Error: You have 2 active boxes (a, b). Delete one with `boxctl rm <box>` or keep working in an existing one.\n"
-	stubQueue(t, func(args []string) (string, error) { return answer, errors.New("exit status 1") }, func([]string) ([]byte, error) { return nil, nil })
-	c, _, _ := queueServer(t)
-	_, _ = addQueueItem("o/r", "g", "", 0)
-	r, _ := newQueueRunner(c)
+	stubBacklog(t, func(args []string) (string, error) { return answer, errors.New("exit status 1") }, func([]string) ([]byte, error) { return nil, nil })
+	c, _, _ := backlogServer(t)
+	_, _ = addBacklogItem("o/r", "g", "", 0)
+	r, _ := newBacklogRunner(c)
 	if _, err := r.pass(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	r.wg.Wait()
-	q, _ := loadQueue()
+	q, _ := loadBacklog()
 	it := q.Item(1)
-	if it.State != queue.Queued || len(it.Runs) != 0 || time.Until(q.Backoff) <= 0 || !strings.Contains(it.Note, "active boxes") {
+	if it.State != backlog.Queued || len(it.Runs) != 0 || time.Until(q.Backoff) <= 0 || !strings.Contains(it.Note, "active boxes") {
 		t.Fatalf("refused: %+v, backoff %v", it, q.Backoff)
 	}
 
 	answer = "Error: cloning o/r on q2-code-1: exit status 128\n"
-	_ = queue.Update(mustQueuePath(), func(q *queue.Queue) error { q.Backoff = time.Time{}; return nil })
+	_ = backlog.Update(mustBacklogPath(), func(q *backlog.Backlog) error { q.Backoff = time.Time{}; return nil })
 	if _, err := r.pass(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	r.wg.Wait()
-	q, _ = loadQueue()
-	if run := q.Item(1).Last(); run == nil || run.Outcome != queue.OutcomeFailed || !strings.Contains(run.Error, "cloning") {
+	q, _ = loadBacklog()
+	if run := q.Item(1).Last(); run == nil || run.Outcome != backlog.OutcomeFailed || !strings.Contains(run.Error, "cloning") {
 		t.Fatalf("failed launch: %+v", q.Item(1))
 	}
 }
 
-func TestQueueCommands(t *testing.T) {
-	stubQueue(t, nil, func(args []string) ([]byte, error) { return nil, nil })
-	it, _ := addQueueItem("o/r", "g", "", 0)
-	if err := retryQueueItem(it.ID); err == nil {
+func TestBacklogCommands(t *testing.T) {
+	stubBacklog(t, nil, func(args []string) ([]byte, error) { return nil, nil })
+	it, _ := addBacklogItem("o/r", "g", "", 0)
+	if err := retryBacklogItem(it.ID); err == nil {
 		t.Error("retry of a queued item")
 	}
-	_ = changeQueueItem(it.ID, func(it *queue.Item) error { it.State = queue.NeedsYou; return nil })
-	if err := retryQueueItem(it.ID); err != nil {
+	_ = changeBacklogItem(it.ID, func(it *backlog.Item) error { it.State = backlog.NeedsYou; return nil })
+	if err := retryBacklogItem(it.ID); err != nil {
 		t.Fatal(err)
 	}
-	q, _ := loadQueue()
-	if got := q.Item(it.ID); got.State != queue.Active || got.Budget() != queue.DefaultBudget+1 {
+	q, _ := loadBacklog()
+	if got := q.Item(it.ID); got.State != backlog.Active || got.Budget() != backlog.DefaultBudget+1 {
 		t.Errorf("retried: %+v", got)
 	}
-	if err := cancelQueueItem(it.ID); err != nil {
+	if err := cancelBacklogItem(it.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := cancelQueueItem(it.ID); err == nil {
+	if err := cancelBacklogItem(it.ID); err == nil {
 		t.Error("cancelled twice")
 	}
-	if err := mergeQueueItem(context.Background(), &queue.Item{ID: 1, PR: 3, Note: "waiting for CI"}, "squash"); err == nil || !strings.Contains(err.Error(), "waiting for CI") {
+	if err := mergeBacklogItem(context.Background(), &backlog.Item{ID: 1, PR: 3, Note: "waiting for CI"}, "squash"); err == nil || !strings.Contains(err.Error(), "waiting for CI") {
 		t.Errorf("merge not ready: %v", err)
 	}
 	var merged []string
 	ghRun = func(_ context.Context, args ...string) ([]byte, error) { merged = args; return nil, nil }
-	if err := mergeQueueItem(context.Background(), &queue.Item{ID: 1, Repo: "o/r", PR: 3, ReadySHA: "abc"}, "squash"); err != nil || strings.Join(merged, " ") != "pr merge 3 --repo o/r --squash --match-head-commit abc" {
+	if err := mergeBacklogItem(context.Background(), &backlog.Item{ID: 1, Repo: "o/r", PR: 3, ReadySHA: "abc"}, "squash"); err != nil || strings.Join(merged, " ") != "pr merge 3 --repo o/r --squash --match-head-commit abc" {
 		t.Errorf("merge: %v %v", err, merged)
 	}
 }
 
-func TestTUIQueue(t *testing.T) {
-	stubQueue(t, nil, func([]string) ([]byte, error) { return nil, nil })
+func TestTUIBacklog(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	tuiFlashFor = time.Millisecond
 	c, _ := fakeBoxServer(t, tuiFixture())
 	m := newTUI(c)
@@ -236,7 +236,7 @@ func TestTUIQueue(t *testing.T) {
 			}
 			next, more := m.Update(msg)
 			m = next.(tuiModel)
-			if _, ok := msg.(tuiQueueDoneMsg); ok {
+			if _, ok := msg.(tuiBacklogDoneMsg); ok {
 				for _, msg := range runCmd(more) {
 					if lm, ok := msg.(tuiListMsg); ok {
 						next, _ := m.Update(lm)
@@ -246,10 +246,10 @@ func TestTUIQueue(t *testing.T) {
 			}
 		}
 	}
-	next, cmd := m.runCommand("queue")
+	next, cmd := m.runCommand("backlog")
 	m = next.(tuiModel)
 	feed(cmd)
-	if m.top().view != queueView {
+	if m.top().view != backlogView {
 		t.Fatalf("view = %v", m.top().view.name)
 	}
 	// a: repository, then goal.
@@ -265,11 +265,11 @@ func TestTUIQueue(t *testing.T) {
 	if got := keys(m.rows()); got != "1" {
 		t.Fatalf("rows = %q", got)
 	}
-	if lines := describeQueueItem(m.queueItem()); !strings.Contains(strings.Join(lines, "\n"), "do the thing") {
+	if lines := describeBacklogItem(m.backlogItem()); !strings.Contains(strings.Join(lines, "\n"), "do the thing") {
 		t.Errorf("describe: %v", lines)
 	}
-	if !strings.Contains(m.queueSummary(), "1 queued") {
-		t.Errorf("summary = %q", m.queueSummary())
+	if !strings.Contains(m.backlogSummary(), "1 queued") {
+		t.Errorf("summary = %q", m.backlogSummary())
 	}
 	// m on an item that isn't ready only says so.
 	if m2, _ := press(t, m, "m"); m2.dialog != nil || !strings.Contains(m2.flash, "isn't ready") {
@@ -279,25 +279,25 @@ func TestTUIQueue(t *testing.T) {
 	m, _ = press(t, m, "ctrl+d")
 	m, cmd = press(t, m, "y")
 	feed(cmd)
-	q, _ := loadQueue()
-	if q.Item(1).State != queue.Cancelled {
+	q, _ := loadBacklog()
+	if q.Item(1).State != backlog.Cancelled {
 		t.Errorf("state = %s", q.Item(1).State)
 	}
 
 	// m on a ready item asks, y merges, and the row is done at once --
 	// not only once a pass sees the PR merged.
-	_ = changeQueueItem(1, func(it *queue.Item) error {
-		it.State, it.PR, it.ReadySHA, it.Note = queue.Active, 7, "abcdef0123", "ready to merge"
+	_ = changeBacklogItem(1, func(it *backlog.Item) error {
+		it.State, it.PR, it.ReadySHA, it.Note = backlog.Active, 7, "abcdef0123", "ready to merge"
 		return nil
 	})
-	feed(loadQueueMsg)
+	feed(loadBacklogMsg)
 	m, _ = press(t, m, "m")
 	m, cmd = press(t, m, "y")
-	if it := m.queue.Item(1); it.Note != "merging" {
+	if it := m.backlog.Item(1); it.Note != "merging" {
 		t.Errorf("while merging: %q", it.Note)
 	}
 	feed(cmd)
-	if it := m.queue.Item(1); it.State != queue.Done || it.Note != "merged" || it.ReadySHA != "" {
+	if it := m.backlog.Item(1); it.State != backlog.Done || it.Note != "merged" || it.ReadySHA != "" {
 		t.Errorf("merged: %s %q %q", it.State, it.Note, it.ReadySHA)
 	}
 
@@ -309,42 +309,42 @@ func TestTUIQueue(t *testing.T) {
 	m = typeIn(t, m, "x")
 	m, cmd = press(t, m, "enter")
 	feed(cmd)
-	if q, _ = loadQueue(); len(q.Items) != 2 || q.Items[1].Repo != "o/other" {
+	if q, _ = loadBacklog(); len(q.Items) != 2 || q.Items[1].Repo != "o/other" {
 		t.Errorf("from :repos: %+v", q.Items)
 	}
 }
 
 // A pass asked for while one is going runs as soon as that one ends: the
 // one going may have read GitHub before the change that asked.
-func TestTUIQueuePassAgain(t *testing.T) {
-	m := tuiModel{qr: &queueRunner{}, queuePassing: true}
-	if cmd := m.queuePass(); cmd != nil || !m.queuePassAgain {
-		t.Fatalf("pass while passing: %v %v", cmd != nil, m.queuePassAgain)
+func TestTUIBacklogPassAgain(t *testing.T) {
+	m := tuiModel{qr: &backlogRunner{}, backlogPassing: true}
+	if cmd := m.backlogPass(); cmd != nil || !m.backlogPassAgain {
+		t.Fatalf("pass while passing: %v %v", cmd != nil, m.backlogPassAgain)
 	}
-	m.queuePassed(tuiQueuePassMsg{})
-	if !m.queuePassing || m.queuePassAgain {
-		t.Errorf("after the pass: passing %v, again %v", m.queuePassing, m.queuePassAgain)
+	m.backlogPassed(tuiBacklogPassMsg{})
+	if !m.backlogPassing || m.backlogPassAgain {
+		t.Errorf("after the pass: passing %v, again %v", m.backlogPassing, m.backlogPassAgain)
 	}
 }
 
 // A goal longer than the terminal is wide wraps on the describe page,
 // so all of it can be read, and scrolling reaches its last line.
-func TestTUIQueueDescribeWraps(t *testing.T) {
-	stubQueue(t, nil, func([]string) ([]byte, error) { return nil, nil })
+func TestTUIBacklogDescribeWraps(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	c, _ := fakeBoxServer(t, tuiFixture())
 	m := newTUI(c)
 	m.width, m.height = 60, 20
 	goal := strings.Repeat("make the thing better ", 30) + "THE-END"
-	if _, err := addQueueItem("o/r", goal, "", 0); err != nil {
+	if _, err := addBacklogItem("o/r", goal, "", 0); err != nil {
 		t.Fatal(err)
 	}
-	q, err := loadQueue()
+	q, err := loadBacklog()
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.queue = q
-	m.loaded["queue"] = true
-	m.pages = []page{{kind: pageTable, view: queueView, sortCol: -1}}
+	m.backlog = q
+	m.loaded["backlog"] = true
+	m.pages = []page{{kind: pageTable, view: backlogView, sortCol: -1}}
 	m, _ = press(t, m, "d")
 	if m.top().kind != pageText {
 		t.Fatalf("d didn't describe: %+v", m.top())
@@ -379,18 +379,18 @@ func TestWrapLines(t *testing.T) {
 	}
 }
 
-// TestTUIQueueRepoChoices: the queue's `a` lists repositories -- the
+// TestTUIBacklogRepoChoices: the backlog's `a` lists repositories -- the
 // current item's first, then the other queued ones, then :repos' -- that
 // typing narrows, up/down selects and tab completes.
-func TestTUIQueueRepoChoices(t *testing.T) {
-	stubQueue(t, nil, func([]string) ([]byte, error) { return nil, nil })
+func TestTUIBacklogRepoChoices(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	c, _ := fakeBoxServer(t, tuiFixture())
 	m := newTUI(c)
 	m.repos = []ghRepo{{FullName: "acme/boxctl-cli"}, {FullName: "acme/web"}, {FullName: "o/r"}}
 	m.loaded["repos"] = true
 	m.reposAt = time.Now()
-	m.queue = &queue.Queue{Items: []*queue.Item{{ID: 1, Repo: "o/r"}, {ID: 2, Repo: "zed/app"}}}
-	m.pages = []page{{kind: pageTable, view: queueView, sortCol: -1}}
+	m.backlog = &backlog.Backlog{Items: []*backlog.Item{{ID: 1, Repo: "o/r"}, {ID: 2, Repo: "zed/app"}}}
+	m.pages = []page{{kind: pageTable, view: backlogView, sortCol: -1}}
 	m.moveTo(true) // item 2, zed/app
 	m, _ = press(t, m, "a")
 	if m.dialog == nil {
@@ -422,7 +422,7 @@ func TestTUIQueueRepoChoices(t *testing.T) {
 	m, _ = press(t, m, "up")
 	m, _ = press(t, m, "up")
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.title != "Queue a goal on acme/web" {
+	if m.dialog == nil || m.dialog.title != "Add a goal on acme/web" {
 		t.Fatalf("goal prompt: %+v", m.dialog)
 	}
 	// A typed owner/name nobody listed is taken as typed.
@@ -430,12 +430,12 @@ func TestTUIQueueRepoChoices(t *testing.T) {
 	m, _ = press(t, m, "a")
 	m = typeIn(t, m, "acme/boxctl")
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.title != "Queue a goal on acme/boxctl" {
+	if m.dialog == nil || m.dialog.title != "Add a goal on acme/boxctl" {
 		t.Fatalf("typed: %+v", m.dialog)
 	}
 }
 
-func TestParseQueueLimit(t *testing.T) {
+func TestParseBacklogLimit(t *testing.T) {
 	for _, c := range []struct {
 		in      string
 		global  int
@@ -451,7 +451,7 @@ func TestParseQueueLimit(t *testing.T) {
 		{in: "1 2 3", bad: true},
 		{in: "2 -1", bad: true},
 	} {
-		g, p, err := parseQueueLimit(c.in)
+		g, p, err := parseBacklogLimit(c.in)
 		if (err != nil) != c.bad {
 			t.Errorf("%q: err = %v", c.in, err)
 			continue
@@ -469,14 +469,14 @@ func TestParseQueueLimit(t *testing.T) {
 	}
 }
 
-// TestTUIQueueLimit: L in :queue asks for the slot limit and saves it.
-func TestTUIQueueLimit(t *testing.T) {
-	stubQueue(t, nil, func([]string) ([]byte, error) { return nil, nil })
+// TestTUIBacklogLimit: L in :backlog asks for the slot limit and saves it.
+func TestTUIBacklogLimit(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	tuiFlashFor = time.Millisecond
 	c, _ := fakeBoxServer(t, tuiFixture())
 	m := newTUI(c)
-	m.queue = &queue.Queue{Limits: queue.DefaultLimits}
-	m.pages = []page{{kind: pageTable, view: queueView, sortCol: -1}}
+	m.backlog = &backlog.Backlog{Limits: backlog.DefaultLimits}
+	m.pages = []page{{kind: pageTable, view: backlogView, sortCol: -1}}
 	m, _ = press(t, m, "L")
 	if m.dialog == nil || m.dialog.title != "Slot limit" {
 		t.Fatalf("dialog: %+v", m.dialog)
@@ -484,8 +484,8 @@ func TestTUIQueueLimit(t *testing.T) {
 	m = typeIn(t, m, "5 3")
 	m, cmd := press(t, m, "enter")
 	runCmd(cmd)
-	q, _ := loadQueue()
-	if q.Limits != (queue.Limits{Global: 5, PerRepo: 3}) {
+	q, _ := loadBacklog()
+	if q.Limits != (backlog.Limits{Global: 5, PerRepo: 3}) {
 		t.Errorf("limits = %+v", q.Limits)
 	}
 	// One number leaves the per-repository limit.
@@ -493,7 +493,7 @@ func TestTUIQueueLimit(t *testing.T) {
 	m = typeIn(t, m, "1")
 	_, cmd = press(t, m, "enter")
 	runCmd(cmd)
-	if q, _ = loadQueue(); q.Limits != (queue.Limits{Global: 1, PerRepo: 3}) {
+	if q, _ = loadBacklog(); q.Limits != (backlog.Limits{Global: 1, PerRepo: 3}) {
 		t.Errorf("limits = %+v", q.Limits)
 	}
 }

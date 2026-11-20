@@ -69,10 +69,10 @@ var (
 	claudeRepos   []string
 	claudeGoal    string
 	claudeIssue   int
-	// claudeQueueItem is the hidden --queue-item: the queue's runs label their box with it.
-	claudeQueueItem int
-	claudeKeep      bool
-	claudeForce     bool
+	// claudeBacklogItem is the hidden --backlog-item: the backlog's runs label their box with it.
+	claudeBacklogItem int
+	claudeKeep        bool
+	claudeForce       bool
 )
 
 var claudeCmd = &cobra.Command{
@@ -150,8 +150,8 @@ func init() {
 	claudeCmd.Flags().StringVar(&claudeHarnessArg, "harness", "", "rules for Claude on the box: a directory (CLAUDE.md, managed-settings.json, agents/ skills/ commands/), a name under ~/.boxctl/harness, or pr-only, the built-in (pull request, never merge); none for no harness (default: ~/.boxctl/harness/default, else for --goal/--issue the built-in pr-only)")
 	claudeCmd.Flags().StringVar(&claudeGoal, "goal", "", "a goal for Claude to carry out unattended, ending in a pull request")
 	claudeCmd.Flags().IntVar(&claudePR, "pr", 0, "work on this open pull request's branch instead of a new one (one --repo): push to it, open no new pull request -- with --goal, a follow-up such as a CI fix")
-	claudeCmd.Flags().IntVar(&claudeQueueItem, "queue-item", 0, "the boxctl queue item this run is for (labels its box)")
-	_ = claudeCmd.Flags().MarkHidden("queue-item")
+	claudeCmd.Flags().IntVar(&claudeBacklogItem, "backlog-item", 0, "the boxctl backlog item this run is for (labels its box)")
+	_ = claudeCmd.Flags().MarkHidden("backlog-item")
 	claudeCmd.Flags().IntVar(&claudeIssue, "issue", 0, "number of a GitHub issue for Claude to resolve unattended, ending in a pull request that closes it (one repository)")
 	claudeCmd.Flags().StringVar(&claudeAuth, "claude-auth", claudeAuthAuto, "how Claude on the box logs in: auto (the token boxctl claude login saved, else /login), token, login or api-key")
 	_ = claudeCmd.RegisterFlagCompletionFunc("claude-auth", cobra.FixedCompletions([]string{claudeAuthAuto, claudeAuthToken, claudeAuthLogin, claudeAuthAPIKey}, cobra.ShellCompDirectiveNoFileComp))

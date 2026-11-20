@@ -65,10 +65,10 @@ var commonHotkeys = []hotkey{
 	{":", "command"}, {"/", "filter"}, {"?", "help"}, {"esc", "back"}, {"ctrl-c", "quit"},
 }
 
-var tuiViews = []*tableView{boxesView, urlsView, imagesView, sizesView, backupsView, reposView, queueView}
+var tuiViews = []*tableView{boxesView, urlsView, imagesView, sizesView, backupsView, reposView, backlogView}
 
 // commandNames are what the : prompt suggests, in the order it offers
-// them: the views, then the other commands (so :q suggests queue first,
+// them: the views, then the other commands (so :q suggests backlog first,
 // and quit after it).
 func commandNames() []string {
 	var names []string

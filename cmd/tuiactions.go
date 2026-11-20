@@ -103,7 +103,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	return m, m.fail("unknown command %q (try :boxes, :urls, :images, :sizes, :backups, :repos, :queue, :help, :q)", words[0])
+	return m, m.fail("unknown command %q (try :boxes, :urls, :images, :sizes, :backups, :repos, :backlog, :help, :q)", words[0])
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -290,14 +290,14 @@ const goalPromptLines = 4
 func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	key := msg.String()
-	if t.view == queueView {
-		if md, cmd, ok := m.handleQueueKey(key); ok {
+	if t.view == backlogView {
+		if md, cmd, ok := m.handleBacklogKey(key); ok {
 			return md, cmd
 		}
 	}
 	if t.view == reposView && key == "a" {
 		if r := m.currentRow(); r != nil {
-			return m.askQueueGoal(r.key)
+			return m.askBacklogGoal(r.key)
 		}
 		return m, nil
 	}
@@ -503,7 +503,7 @@ func (m *tuiModel) pushHelp() {
 	}
 	lines := []string{"General", ""}
 	general := [][2]string{
-		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos, queue (`:boxes web` filters too; tab completes)"},
+		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos, backlog (`:boxes web` filters too; tab completes)"},
 		{":create", "create a box"}, {":ssh <box>", "open a terminal on a box"},
 		{":help", "this page"}, {":q", "quit (ctrl-c too)"},
 		{"/text", "filter the rows; esc clears"},
