@@ -152,7 +152,10 @@ func (herdrMux) setup() string {
 }
 
 // start starts the server headless if it isn't running (`herdr
-// workspace list` fails without one; `herdr status` exits 0 either way).
+// workspace list` fails without one; `herdr status` exits 0 either way),
+// with the whole subshell's output redirected, not only the server's: a
+// subshell left waiting on it would hold the ssh session's output open,
+// and the start -- a goal's launch -- would never return.
 // A server started afresh restores its last layout -- shells in the old
 // sessions' directories, not the sessions, which died with it -- so
 // those workspaces are closed first, or an old session's label would
@@ -179,7 +182,7 @@ func (herdrMux) start(s taskSession, line string, detached bool) string {
 	}
 	script := muxMarkScript("herdr") + `
 if ! herdr workspace list >/dev/null 2>&1; then
-  (cd / && setsid herdr server >/dev/null 2>&1 </dev/null &)
+  (cd / && exec setsid herdr server) >/dev/null 2>&1 </dev/null &
   n=0; until herdr workspace list >/dev/null 2>&1; do n=$((n+1)); [ "$n" -lt 100 ] || { echo "herdr's server didn't start" >&2; exit 1; }; sleep 0.1; done
   for w in $(herdr workspace list 2>/dev/null | grep -o '"workspace_id":"[^"]*"' | sed 's/.*:"//; s/"$//'); do herdr workspace close "$w" >/dev/null 2>&1; done
 fi

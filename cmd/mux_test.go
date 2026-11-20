@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -13,7 +14,8 @@ import (
 // fakeHerdr puts a herdr on PATH that logs its calls to the returned
 // file and answers like herdr 0.9.5 does: `workspace list` fails until
 // `server` has run, then lists the workspaces `workspace create` made,
-// labeled and working; `workspace create` returns its root pane. A setsid
+// labeled and working; `workspace create` returns its root pane; `server`
+// stays up for $FAKE_HERDR_SERVER_SECS, as a real one stays for good. A setsid
 // goes with it, for a machine without one (macOS).
 func fakeHerdr(t *testing.T) (log string) {
 	t.Helper()
@@ -29,7 +31,7 @@ case "$1 $2" in
     n=$((n+1)); ws="$ws${ws:+,}{\"active_tab_id\":\"w$n:t1\",\"agent_status\":\"working\",\"focused\":true,\"label\":\"$l\",\"number\":$n,\"pane_count\":1,\"tab_count\":1,\"workspace_id\":\"w$n\"}"
   done
   printf '{"id":"cli:workspace:list","result":{"type":"workspace_list","workspaces":[%s]}}\n' "$ws" ;;
-"server ") touch "$d/up" ;;
+"server ") touch "$d/up"; sleep "${FAKE_HERDR_SERVER_SECS:-0}" ;;
 "workspace close") grep -v "^$(sed -n "${3#w}p" "$d/labels")$" "$d/labels" >"$d/labels.new"; mv "$d/labels.new" "$d/labels" ;;
 "workspace create")
   while [ $# -gt 0 ]; do [ "$1" = --label ] && l=$2; shift; done
@@ -117,11 +119,20 @@ func TestHerdrStart(t *testing.T) {
 func TestHerdrStartDetached(t *testing.T) {
 	log := fakeHerdr(t)
 	_, runDir := boxPaths(t)
+	t.Setenv("FAKE_HERDR_SERVER_SECS", "5")
 	s := newTaskSession("/w/app", "auth")
 	s.shellAfter = true
+	// Over ssh, the start returns when its output closes: the server it
+	// leaves running must not hold it (a goal launch hung until the box
+	// went), so CombinedOutput's pipe has to close long before the server
+	// ends.
+	start := time.Now()
 	out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, "claude; exec bash", true)).CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("the start's output stayed open %s, while the server ran", d.Round(time.Second))
 	}
 	calls := readFile(t, log)
 	if !strings.Contains(calls, "--label claude-auth --focus\n") || !strings.Contains(calls, "pane run w1:p1 exec sh "+shellQuote(runDir+"/claude-auth.cmd")+"\n") {

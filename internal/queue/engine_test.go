@@ -135,10 +135,48 @@ func TestInterruptedLaunch(t *testing.T) {
 	if acts := Decide(q, Obs{Now: t0.Add(time.Minute), Boxes: map[string]Box{}, Launching: map[string]bool{"q1-code-1": true}}); len(acts) != 0 || it.Current() == nil {
 		t.Fatalf("launching: %v", kinds(acts))
 	}
-	// Not launching any more, never launched, box there: lost, box removed, a new run.
-	acts := Decide(q, Obs{Now: t0.Add(2 * time.Minute), Boxes: map[string]Box{"q1-code-1": {State: "running"}}})
+	// Not launching here any more (a tui closed mid-launch), never said
+	// launched, box there but silent: waited for, then lost after the grace.
+	silent := map[string]Box{"q1-code-1": {State: "running"}}
+	if acts := Decide(q, Obs{Now: t0.Add(2 * time.Minute), Boxes: silent}); len(acts) != 0 || it.Current() == nil {
+		t.Fatalf("silent within grace: %v %+v", kinds(acts), it.Runs)
+	}
+	acts := Decide(q, Obs{Now: t0.Add(LaunchGrace + time.Minute), Boxes: silent})
 	if got := kinds(acts); len(got) < 2 || got[0] != "remove_box:q1-code-1" || it.Runs[0].Outcome != OutcomeLost {
-		t.Errorf("interrupted: %v %+v", got, it.Runs[0])
+		t.Errorf("silent past grace: %v %+v", got, it.Runs[0])
+	}
+
+	// No box at all, past the grace: lost, nothing to remove.
+	q = newQ(1)
+	Decide(q, Obs{Now: t0, Boxes: map[string]Box{}})
+	it = q.Items[0]
+	if Decide(q, Obs{Now: t0.Add(time.Minute), Boxes: map[string]Box{}}); it.Current() == nil {
+		t.Fatal("a launch from a closed tui wasn't given time to make its box")
+	}
+	Decide(q, Obs{Now: t0.Add(LaunchGrace + time.Minute), Boxes: map[string]Box{}})
+	if it.Runs[0].Outcome != OutcomeLost {
+		t.Errorf("no box past grace: %+v", it.Runs[0])
+	}
+}
+
+// TestReportingBoxBeatsLaunch: a box that reports the run is followed
+// whether or not its launch returned -- still running here, or lost with
+// a closed tui -- so a done run's PR is picked up and its box kept.
+func TestReportingBoxBeatsLaunch(t *testing.T) {
+	for _, launching := range []bool{true, false} {
+		q := newQ(1)
+		Decide(q, Obs{Now: t0, Boxes: map[string]Box{}})
+		it := q.Items[0]
+		boxes := map[string]Box{"q1-code-1": {State: "running", Status: "done", PRURL: "https://github.com/o/r/pull/1330", Branch: "boxctl/x-1"}}
+		acts := Decide(q, Obs{Now: t0.Add(5 * time.Minute), Boxes: boxes, Launching: map[string]bool{"q1-code-1": launching}})
+		for _, k := range kinds(acts) {
+			if strings.HasPrefix(k, "remove_box") || strings.HasPrefix(k, "launch") {
+				t.Errorf("launching=%v: %s", launching, k)
+			}
+		}
+		if r := it.Runs[0]; r.Outcome != OutcomeDone || !r.Launched || it.PR != 1330 || it.Branch != "boxctl/x-1" {
+			t.Errorf("launching=%v: %+v pr %d", launching, r, it.PR)
+		}
 	}
 }
 
