@@ -16,6 +16,7 @@
 package backlog
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -262,7 +263,7 @@ func Load(path string) (*Backlog, error) {
 
 // save writes q to path atomically (a temporary file, then a rename).
 func save(path string, q *Backlog) error {
-	data, err := json.MarshalIndent(q, "", "  ")
+	data, err := encode(q)
 	if err != nil {
 		return err
 	}
@@ -270,10 +271,43 @@ func save(path string, q *Backlog) error {
 		return err
 	}
 	tmp := path + ".tmp." + strconv.Itoa(os.Getpid())
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// encode is q as JSON with each item on a line of its own: compact, which
+// is quicker to write than indented JSON, and still readable a line per
+// goal (jq . for the indented view).
+func encode(q *Backlog) ([]byte, error) {
+	rest := *q
+	rest.Items = nil
+	head, err := json.Marshal(&rest)
+	if err != nil {
+		return nil, err
+	}
+	var items bytes.Buffer
+	items.WriteString(`"items":[`)
+	for i, it := range q.Items {
+		line, err := json.Marshal(it)
+		if err != nil {
+			return nil, err
+		}
+		if i > 0 {
+			items.WriteByte(',')
+		}
+		items.WriteString("\n")
+		items.Write(line)
+	}
+	if len(q.Items) > 0 {
+		items.WriteString("\n")
+	}
+	items.WriteByte(']')
+	// Items is nil in rest, so "items":null is there exactly once; any
+	// such text inside a string field would have its quotes escaped.
+	data := bytes.Replace(head, []byte(`"items":null`), items.Bytes(), 1)
+	return append(data, '\n'), nil
 }
 
 // lockStale is when a lock file is taken to be left over from a process
