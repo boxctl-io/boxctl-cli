@@ -21,7 +21,7 @@ var runsView = &tableView{
 	columns:  []column{{"ITEM", 'I'}, {"REPO", 'R'}, {"KIND", 'K'}, {"BOX", 'B'}, {"STATE", 'S'}, {"AGE", 0}},
 	stateCol: 4,
 	empty:    "No runs yet: a goal in :backlog gets one when there's a slot.",
-	hotkeys:  []hotkey{{"s", "shell"}, {"l", "logs"}, {"ctrl-d", "kill"}, {"L", "slot limit"}, {"d", "describe"}},
+	hotkeys:  []hotkey{{"s", "shell"}, {"a", "claude"}, {"l", "logs"}, {"ctrl-d", "kill"}, {"L", "slot limit"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow
 		for _, r := range m.runRows() {
@@ -67,7 +67,7 @@ func (m tuiModel) handleRunsKey(key string) (tea.Model, tea.Cmd, bool) {
 	case "L":
 		md, cmd := m.askBacklogLimit()
 		return md, cmd, true
-	case "s", "l", "ctrl+d", "enter", "d", "y":
+	case "s", "a", "l", "ctrl+d", "enter", "d", "y":
 	default:
 		return m, nil, false
 	}
@@ -89,6 +89,9 @@ func (m tuiModel) handleRunsKey(key string) (tea.Model, tea.Cmd, bool) {
 	switch key {
 	case "s":
 		md, cmd := m.ssh(r.run.Box)
+		return md, cmd, true
+	case "a":
+		md, cmd := m.claudeSession(m.box(r.run.Box))
 		return md, cmd, true
 	case "l":
 		md, cmd := m.logs(r.run.Box)

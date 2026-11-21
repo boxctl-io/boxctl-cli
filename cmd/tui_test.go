@@ -778,3 +778,46 @@ func TestTUICommandComplete(t *testing.T) {
 		t.Fatalf("view = %v, want repos", m.top().view.name)
 	}
 }
+
+func TestClaudeSessionArgs(t *testing.T) {
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		labels map[string]string
+		want   string // the args joined, or the error's substring after "!"
+	}{
+		{map[string]string{"boxctl.run": "goal", "boxctl.agent": "claude", "boxctl.repo": "cdalar/boxctl"}, "claude --box b -- --continue"},
+		{map[string]string{"boxctl.run": "repo", "boxctl.agent": "claude"}, "claude --box b"},
+		{map[string]string{"boxctl.run": "box", "boxctl.agent": "claude", "boxctl.project": dir}, "claude --box b --project " + dir},
+		{map[string]string{"boxctl.run": "session", "boxctl.project": dir + "/gone"}, "!isn't on this machine"},
+		{map[string]string{"boxctl.run": "box", "boxctl.agent": "codex"}, "!runs codex"},
+		{map[string]string{"team": "web"}, "!no Claude session"},
+		{nil, "!no Claude session"},
+	} {
+		args, err := claudeSessionArgs(&client.VM{Name: "b", Labels: tc.labels})
+		if want, ok := strings.CutPrefix(tc.want, "!"); ok {
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("%v: args %q, err %v; want an error with %q", tc.labels, args, err, want)
+			}
+			continue
+		}
+		if err != nil || strings.Join(args, " ") != tc.want {
+			t.Errorf("%v: args %q, err %v; want %q", tc.labels, args, err, tc.want)
+		}
+	}
+}
+
+func TestTUIClaudeSessionKey(t *testing.T) {
+	m := newTUI(nil)
+	m.vms = tuiFixture()
+	sortBoxes(m.vms)
+	m.selectRow("web") // not a boxctl claude box
+	m, _ = press(t, m, "a")
+	if !m.flashErr || !strings.Contains(m.flash, "no Claude session") {
+		t.Errorf("a on web: flash=%q", m.flash)
+	}
+	next, _ := m.Update(tuiClaudeDoneMsg{box: "goal-box", err: errors.New("exit status 1"), stderr: "Error: goal-box is gone\n"})
+	m = next.(tuiModel)
+	if !m.flashErr || m.flash != "claude on goal-box: goal-box is gone" {
+		t.Errorf("flash = %q", m.flash)
+	}
+}

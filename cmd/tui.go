@@ -132,9 +132,10 @@ type (
 		err    error
 		stderr string
 	}
-	tuiClaudeDoneMsg struct { // `boxctl claude --repo` from :repos ended
+	tuiClaudeDoneMsg struct { // `boxctl claude --repo` from :repos, or a box's session (a), ended
 		repo   string
-		goal   bool // a --goal run: it started Claude and returned
+		box    string // a's: the box whose session it was
+		goal   bool   // a --goal run: it started Claude and returned
 		err    error
 		stderr string
 		stdout string // a goal run's, with the box it started
@@ -475,6 +476,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.refresh()
 
 	case tuiClaudeDoneMsg:
+		if msg.box != "" {
+			if msg.err != nil {
+				return m, tea.Batch(m.fail("claude on %s: %s", msg.box, claudeFailure(msg.stderr, msg.err)), m.refresh())
+			}
+			return m, m.refresh()
+		}
 		if msg.err != nil {
 			return m, tea.Batch(m.fail("claude on %s: %s", msg.repo, claudeFailure(msg.stderr, msg.err)), m.refresh())
 		}

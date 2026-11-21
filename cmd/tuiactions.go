@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -430,6 +431,8 @@ func (m tuiModel) handleBoxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s":
 		return m.ssh(vm.Name)
+	case "a":
+		return m.claudeSession(vm)
 	case "l":
 		return m.logs(vm.Name)
 	case "p":
@@ -873,4 +876,58 @@ func (m tuiModel) logs(name string) (tea.Model, tea.Cmd) {
 		return msg
 	}
 	return m, tea.Batch(fetch, m.say("reading %s's log…", name), m.spinIfBusy())
+}
+
+// claudeSessionArgs is the command that opens the box's Claude session
+// -- `boxctl claude --box <name>`, which attaches to the session running
+// there or starts one in the project the box holds -- or an error saying
+// why this box has none to open. A box holding a local project (its
+// boxctl.project label) is opened with --project, so it works from
+// whatever directory the tui runs in; a --repo/--goal box needs none,
+// its clone exists only on the box. A goal run's Claude ran with
+// claude -p, so once that's over, --continue picks its conversation up
+// to ask for changes.
+func claudeSessionArgs(vm *client.VM) ([]string, error) {
+	run := vm.Labels["boxctl.run"]
+	if run == "" {
+		return nil, fmt.Errorf("%s wasn't made by boxctl claude, so it has no Claude session; s opens a shell", vm.Name)
+	}
+	if a := vm.Labels["boxctl.agent"]; a != "" && a != "claude" {
+		return nil, fmt.Errorf("%s runs %s, not Claude", vm.Name, a)
+	}
+	args := []string{"claude", "--box", vm.Name}
+	if p := vm.Labels["boxctl.project"]; p != "" {
+		if st, err := os.Stat(p); err != nil || !st.IsDir() {
+			return nil, fmt.Errorf("%s holds %s, which isn't on this machine; run boxctl claude --box %s where it is", vm.Name, p, vm.Name)
+		}
+		args = append(args, "--project", p)
+	}
+	if apiURLFlag != "" {
+		args = append(args, "--api-url", apiURLFlag)
+	}
+	if run == "goal" {
+		args = append(args, "--", "--continue")
+	}
+	return args, nil
+}
+
+// claudeSession hands the terminal to the box's Claude session (see
+// claudeSessionArgs), a child process as ssh is. Detaching (or Claude
+// quitting) comes back here.
+func (m tuiModel) claudeSession(vm *client.VM) (tea.Model, tea.Cmd) {
+	args, err := claudeSessionArgs(vm)
+	if err != nil {
+		return m, m.fail("%v", err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return m, m.fail("finding boxctl: %v", err)
+	}
+	cmd := exec.Command(exe, args...)
+	errTail := &tailBuffer{max: 4096}
+	cmd.Stderr = io.MultiWriter(os.Stderr, errTail)
+	name := vm.Name
+	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return tuiClaudeDoneMsg{box: name, err: err, stderr: errTail.String()}
+	})
 }
