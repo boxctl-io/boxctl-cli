@@ -65,7 +65,10 @@ var commonHotkeys = []hotkey{
 	{":", "command"}, {"/", "filter"}, {"?", "help"}, {"esc", "back"}, {"ctrl-c", "quit"},
 }
 
-var tuiViews = []*tableView{boxesView, urlsView, imagesView, sizesView, backupsView, reposView, backlogView, runsView}
+// The order is also tab completion's at the : prompt, which takes the first
+// match: backlog comes before backups so `:back<tab>` is the backlog, the
+// view opened far more often (down/ctrl-n still steps on to backups).
+var tuiViews = []*tableView{boxesView, urlsView, imagesView, sizesView, backlogView, runsView, backupsView, reposView}
 
 // commandNames are what the : prompt suggests, in the order it offers
 // them: the views, then the other commands.
