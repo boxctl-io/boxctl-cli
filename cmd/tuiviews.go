@@ -109,7 +109,7 @@ func commandNames() []string {
 	for _, v := range tuiViews {
 		names = append(names, v.name)
 	}
-	return append(names, "create", "help", "ssh", "quit")
+	return append(names, "home", "create", "help", "ssh", "quit")
 }
 
 // findView is the view `:name` means, nil for none.

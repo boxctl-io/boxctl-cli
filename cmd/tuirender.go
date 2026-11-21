@@ -241,9 +241,12 @@ func (m tuiModel) hotkeyBlock(width int) []string {
 		v = t.view
 	}
 	keys := append([]hotkey{}, v.hotkeys...)
-	if t.kind == pageText {
+	switch t.kind {
+	case pageHome:
+		keys = append(append([]hotkey{}, homeHotkeys...), screenHotkeys()...)
+	case pageText:
 		keys = []hotkey{{"j/k", "scroll"}, {"g/G", "top/bottom"}, {"y", "json"}, {"s", "shell"}, {"a", "claude"}, {"l", "logs"}}
-	} else {
+	default:
 		keys = append(keys, screenHotkeys()...)
 	}
 	keys = append(keys, commonHotkeys...)
@@ -298,6 +301,8 @@ func (m tuiModel) boxView() string {
 		lines = m.create.lines(w)
 	case m.top().kind == pageText:
 		title, lines = m.textPage(w, inner)
+	case m.top().kind == pageHome:
+		title, lines = m.homeView(w, inner)
 	default:
 		title, lines = m.table(w, inner)
 	}
@@ -580,8 +585,11 @@ func (m tuiModel) dialogAreaWidth() int {
 // pageTitle is the top page's own title, for a dialog over it.
 func (m tuiModel) pageTitle() string {
 	t := m.top()
-	if t.kind == pageText {
+	switch t.kind {
+	case pageText:
 		return t.title
+	case pageHome:
+		return "Home"
 	}
 	return t.view.title
 }
