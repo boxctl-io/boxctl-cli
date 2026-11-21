@@ -810,3 +810,30 @@ func TestTUIClaudeSessionKey(t *testing.T) {
 		t.Errorf("flash = %q", m.flash)
 	}
 }
+
+func TestTUIScreenKeys(t *testing.T) {
+	// No screen key may shadow a key a view already has.
+	for _, v := range tuiViews {
+		for _, h := range v.hotkeys {
+			if screenFor(h.key) != nil {
+				t.Errorf("screen key %q shadows %s's %q", h.key, v.name, h.label)
+			}
+		}
+	}
+	m := newTUI(nil)
+	for _, step := range []struct {
+		key  string
+		want *tableView
+	}{{"t", backlogView}, {"u", runsView}, {"h", reposView}, {"b", boxesView}, {"u", runsView}} {
+		m, _ = press(t, m, step.key)
+		if m.top().view != step.want || len(m.pages) != 1 {
+			t.Fatalf("%s: view = %s (%d pages), want %s", step.key, m.top().view.name, len(m.pages), step.want.name)
+		}
+	}
+	// From a pushed page too: the switch replaces the stack.
+	m.openRuns(1)
+	m, _ = press(t, m, "t")
+	if m.top().view != backlogView || len(m.pages) != 1 {
+		t.Fatalf("t from a scoped :runs: view = %s (%d pages)", m.top().view.name, len(m.pages))
+	}
+}
