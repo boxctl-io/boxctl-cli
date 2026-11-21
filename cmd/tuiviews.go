@@ -107,7 +107,7 @@ var boxesView = &tableView{
 	stateCol: 1,
 	empty:    "No boxes yet. Press c to create one.",
 	hotkeys: []hotkey{
-		{"s", "shell"}, {"d", "describe"}, {"y", "json"}, {"l", "logs"}, {"c", "create"},
+		{"s", "shell"}, {"a", "claude"}, {"d", "describe"}, {"y", "json"}, {"l", "logs"}, {"c", "create"},
 		{"p", "pause"}, {"r", "resume"}, {"K", "keep"}, {"e", "expose"}, {"ctrl-d", "delete"},
 		{"0", "all"}, {"1", "running"}, {"2", "paused"},
 	},

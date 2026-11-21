@@ -171,6 +171,14 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   child process through `tea.ExecProcess` -- in-process `runSSH` would
   leave its uncancellable stdin reader behind to eat the next keypress
   -- with `--api-url` passed on and its stderr captured for the flash.
+  `a` (boxes, describe, `:runs`) opens the box's Claude session the same
+  way: `boxctl claude --box <name>` as a child process
+  (`claudeSessionArgs`), with `--project <boxctl.project label>` when the
+  box holds a local directory -- so it works from any cwd -- and `--
+  --continue` for a goal box, whose `claude -p` conversation that resumes
+  once the run is over (while it runs, the runner's session is attached).
+  A box without a `boxctl.run` label is refused: `claude --box` would copy
+  the cwd onto it.
   Bare `boxctl` is the tui too (`runBareRoot`, as onctl does): on a
   terminal with a token; otherwise the help, so a pipe or a fresh
   install sees what it always did.
