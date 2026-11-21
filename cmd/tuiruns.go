@@ -11,7 +11,7 @@ import (
 )
 
 // `:runs`: the backlog's runs, going and ended (runs.go's rows), with a
-// run's box keys -- shell, logs, kill. Enter on an item in :backlog opens
+// run's box keys -- shell, logs, kill. Enter on an item in :tasks opens
 // it scoped to that item's runs (page.item).
 
 var runsView = &tableView{
@@ -20,7 +20,7 @@ var runsView = &tableView{
 	resource: "backlog",
 	columns:  []column{{"ITEM", 'I'}, {"REPO", 'R'}, {"KIND", 'K'}, {"BOX", 'B'}, {"STATE", 'S'}, {"AGE", 0}},
 	stateCol: 4,
-	empty:    "No runs yet: a goal in :backlog gets one when there's a slot.",
+	empty:    "No runs yet: a goal in :tasks gets one when there's a slot.",
 	hotkeys:  []hotkey{{"s", "shell"}, {"l", "logs"}, {"ctrl-d", "kill"}, {"L", "slot limit"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow
@@ -128,7 +128,7 @@ func (m tuiModel) askKill(r backlogRun) (tea.Model, tea.Cmd) {
 	seen := backlogBoxes(m.vms)[box]
 	body := []string{
 		"Its box is deleted, with whatever is on it.",
-		fmt.Sprintf("#%d then waits for you: nothing more runs for it until r (retry) in :backlog.", id),
+		fmt.Sprintf("#%d then waits for you: nothing more runs for it until r (retry) in :tasks.", id),
 	}
 	m.ask(fmt.Sprintf("Kill #%d's %s run on %s?", id, kind, box), body, func(m tuiModel) (tea.Model, tea.Cmd) {
 		c := m.c

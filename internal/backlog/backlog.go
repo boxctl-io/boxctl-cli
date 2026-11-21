@@ -1,5 +1,5 @@
-// Package backlog is the work backlog behind `boxctl backlog` and the tui's
-// :backlog view: goals waiting to become pull requests, each worked on by
+// Package backlog is the work backlog behind `boxctl tasks` and the tui's
+// :tasks view: goals waiting to become pull requests, each worked on by
 // one unattended `boxctl claude --goal` run at a time, with follow-up
 // runs on the pull request's branch (`--pr`) when its CI fails or it
 // conflicts with its base. It's the boxctl-orchestrator design
@@ -185,7 +185,7 @@ type Backlog struct {
 	// limit, or no room on the fleet), until it passes.
 	Backoff    time.Time `json:"backoff,omitempty"`
 	BackoffWhy string    `json:"backoff_why,omitempty"`
-	// Loop is who runs the passes (a tui or `boxctl backlog dispatch`) and when
+	// Loop is who runs the passes (a tui or `boxctl tasks dispatch`) and when
 	// it last did one, so a second one doesn't run them too.
 	Loop     string    `json:"loop,omitempty"`
 	LoopSeen time.Time `json:"loop_seen,omitempty"`
@@ -281,7 +281,7 @@ func save(path string, q *Backlog) error {
 const lockStale = 30 * time.Second
 
 // Update loads the backlog, lets fn change it and saves it, holding a lock
-// file (path.lock) throughout, so a tui, `boxctl backlog dispatch` and `boxctl
+// file (path.lock) throughout, so a tui, `boxctl tasks dispatch` and `boxctl
 // backlog add` never write over each other's changes. fn returning an
 // error saves nothing.
 func Update(path string, fn func(q *Backlog) error) error {

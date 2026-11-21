@@ -44,7 +44,7 @@ func runsFixture(t *testing.T) []client.VM {
 	}
 }
 
-// runsTUI is a tui on :backlog over runsFixture, its listings loaded.
+// runsTUI is a tui on :tasks over runsFixture, its listings loaded.
 func runsTUI(t *testing.T, c *client.Client, vms []client.VM) tuiModel {
 	t.Helper()
 	m := newTUI(c)
@@ -118,7 +118,7 @@ func TestTUIRuns(t *testing.T) {
 	if cmd == nil || !strings.Contains(m2.flash, "its box is gone") {
 		t.Errorf("s on a gone box: %q", m2.flash)
 	}
-	// esc goes back to :backlog, still on #3.
+	// esc goes back to :tasks, still on #3.
 	m, _ = press(t, m, "esc")
 	if m.top().view != backlogView || m.currentRow().key != "3" {
 		t.Fatalf("esc: %s %v", m.top().view.name, m.currentRow())

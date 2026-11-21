@@ -137,7 +137,7 @@ func runRuns(cmd *cobra.Command, args []string) error {
 		return printJSON(out)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(os.Stderr, "No runs yet: boxctl backlog add a goal, and the tui or boxctl backlog dispatch starts them.")
+		fmt.Fprintln(os.Stderr, "No runs yet: boxctl tasks add a goal, and the tui or boxctl tasks dispatch starts them.")
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

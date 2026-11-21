@@ -23,7 +23,7 @@ import (
 // The backlog's loop: what a pass observes and what it does about it. The
 // decisions are internal/backlog's (Decide); this is the I/O around them,
 // shared by the tui (a pass every backlogPassEvery while it's open) and
-// `boxctl backlog dispatch` (the same, with no screen). A run is `boxctl claude
+// `boxctl tasks dispatch` (the same, with no screen). A run is `boxctl claude
 // --repo R --box <name> --goal "..."` (plus --pr N for a follow-up) run as
 // a child process, its output kept in ~/.boxctl/backlog/logs/<box>.log.
 
