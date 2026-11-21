@@ -291,6 +291,9 @@ const goalPromptLines = 4
 func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	key := msg.String()
+	if v := screenFor(key); v != nil {
+		return m, m.openView(v)
+	}
 	if t.view == backlogView {
 		if md, cmd, ok := m.handleBacklogKey(key); ok {
 			return md, cmd
@@ -514,6 +517,7 @@ func (m *tuiModel) pushHelp() {
 	lines := []string{"General", ""}
 	general := [][2]string{
 		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos, backlog, runs (`:boxes web` filters too; tab completes)"},
+		{"b/t/u/h", "switch to :boxes, :backlog, :runs, :repos with one key (in a table)"},
 		{":create", "create a box"}, {":ssh <box>", "open a terminal on a box"},
 		{":help", "this page"}, {":q", "quit (ctrl-c too)"},
 		{"/text", "filter the rows; esc clears"},
