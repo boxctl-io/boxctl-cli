@@ -746,15 +746,15 @@ func TestTUICommandComplete(t *testing.T) {
 	m := newTUI(nil)
 	m = typeIn(t, m, ":ba")
 	m, _ = press(t, m, "tab")
-	if got := m.command.Value(); got != "backups" {
-		t.Fatalf(":ba<tab> = %q, want backups", got)
+	if got := m.command.Value(); got != "backlog" {
+		t.Fatalf(":ba<tab> = %q, want backlog (the first match, ahead of backups)", got)
 	}
 	m, _ = press(t, m, "esc")
 	m = typeIn(t, m, ":ba")
 	m, _ = press(t, m, "down")
 	m, _ = press(t, m, "tab")
-	if got := m.command.Value(); got != "backlog" {
-		t.Fatalf(":ba<down><tab> = %q, want backlog", got)
+	if got := m.command.Value(); got != "backups" {
+		t.Fatalf(":ba<down><tab> = %q, want backups", got)
 	}
 	m, _ = press(t, m, "esc")
 	m = typeIn(t, m, ":re")
