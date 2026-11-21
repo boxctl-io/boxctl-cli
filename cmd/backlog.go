@@ -16,38 +16,39 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// boxctl backlog: goals waiting to become pull requests, worked on by
+// boxctl tasks: goals waiting to become pull requests, worked on by
 // unattended `boxctl claude --goal` runs, a few at a time (internal/backlog
-// has the rules). The tui's :backlog view runs the passes while it's open;
-// `boxctl backlog dispatch` runs them with no screen.
+// has the rules). The tui's :tasks view runs the passes while it's open;
+// `boxctl tasks dispatch` runs them with no screen.
 
 var backlogCmd = &cobra.Command{
-	Use:   "backlog",
-	Short: "Goals for Claude to turn into pull requests, a few at a time",
+	Use:     "tasks",
+	Aliases: []string{"backlog"},
+	Short:   "Goals for Claude to turn into pull requests, a few at a time",
 	Long: `A backlog of goals, each ending in one pull request. Each one becomes an
 unattended boxctl claude --goal run on a box of its own, a few at a time
-(boxctl backlog limit), and its pull request is then watched until you merge it:
+(boxctl tasks limit), and its pull request is then watched until you merge it:
 
   - CI fails: the failed jobs are re-run once; if they fail again, a
     follow-up run fixes it on the pull request's branch (claude --pr).
   - It conflicts with its base: a follow-up run merges the base in.
   - It's behind its base: GitHub is asked to update the branch, and it's
     ready again only once CI passes on that.
-  - Green and up to date: "ready to merge" -- boxctl backlog merge, or m in
+  - Green and up to date: "ready to merge" -- boxctl tasks merge, or m in
     the tui. Nothing is merged without you.
 
-Each kind of run gets 2 attempts (boxctl backlog retry adds one); after that
+Each kind of run gets 2 attempts (boxctl tasks retry adds one); after that
 the item needs you. A run's box is deleted once the next run starts or the
 pull request is merged.
 
-The passes run while boxctl tui is open (:backlog shows the backlog) or
-boxctl backlog dispatch is, never both. Nothing moves while neither is running;
+The passes run while boxctl tui is open (:tasks shows the backlog) or
+boxctl tasks dispatch is, never both. Nothing moves while neither is running;
 runs already on boxes carry on.
 
-  boxctl backlog add --repo owner/name "bump Go and fix what breaks"
-  boxctl backlog                     # list it
-  boxctl backlog merge 3             # merge #3's pull request
-  boxctl backlog dispatch           # run the passes here, no screen`,
+  boxctl tasks add --repo owner/name "bump Go and fix what breaks"
+  boxctl tasks                     # list it
+  boxctl tasks merge 3             # merge #3's pull request
+  boxctl tasks dispatch           # run the passes here, no screen`,
 	Args: cobra.NoArgs,
 	RunE: runBacklogLs,
 }
@@ -106,7 +107,7 @@ var backlogAddCmd = &cobra.Command{
 		}
 		fmt.Printf("Queued #%d on %s.\n", it.ID, it.Repo)
 		if q, err := loadBacklog(); err == nil && (q.Loop == "" || time.Since(q.LoopSeen) > backlog.LoopStale) {
-			fmt.Fprintln(os.Stderr, "Nothing is running the backlog: open boxctl tui (:backlog) or run boxctl backlog dispatch.")
+			fmt.Fprintln(os.Stderr, "Nothing is running the backlog: open boxctl tui (:tasks) or run boxctl tasks dispatch.")
 		}
 		return nil
 	},
@@ -265,7 +266,7 @@ func loadBacklog() (*backlog.Backlog, error) { return backlog.Load(mustBacklogPa
 func backlogID(s string) (int, error) {
 	id, err := strconv.Atoi(strings.TrimPrefix(s, "#"))
 	if err != nil || id < 1 {
-		return 0, fmt.Errorf("%q: use an item's number, as boxctl backlog lists it", s)
+		return 0, fmt.Errorf("%q: use an item's number, as boxctl tasks lists it", s)
 	}
 	return id, nil
 }
@@ -281,7 +282,7 @@ func addBacklogItem(repo, goal, model string, priority int) (*backlog.Item, erro
 
 // changeBacklogItem applies fn to item id under the backlog's lock.
 // setBacklogLimits sets the limits given (nil leaves one as it is) and
-// returns them all: `backlog limit` and :backlog's L.
+// returns them all: `backlog limit` and :tasks's L.
 func setBacklogLimits(global, perRepo *int) (backlog.Limits, error) {
 	var l backlog.Limits
 	err := backlog.Update(mustBacklogPath(), func(q *backlog.Backlog) error {
@@ -377,7 +378,7 @@ func runBacklogLs(cmd *cobra.Command, args []string) error {
 		return enc.Encode(items)
 	}
 	if len(items) == 0 {
-		fmt.Fprintln(os.Stderr, "The backlog is empty: boxctl backlog add --repo owner/name \"a goal\".")
+		fmt.Fprintln(os.Stderr, "The backlog is empty: boxctl tasks add --repo owner/name \"a goal\".")
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

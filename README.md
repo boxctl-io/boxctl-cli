@@ -19,7 +19,7 @@ boxctl rm my-box                            # done
 ## Contents
 
 - [Install](#install) · [Usage](#usage)
-- [Claude Code on a box](#claude-code-on-a-box-boxctl-claude) · [The backlog](#the-backlog-boxctl-backlog)
+- [Claude Code on a box](#claude-code-on-a-box-boxctl-claude) · [Tasks](#tasks-boxctl-tasks)
 - [Real ssh](#real-ssh-ssh-proxy) · [Claude Code plugin](#claude-code-plugin)
 - [Auth](#how-auth-works) · [Security](#security--credentials)
 - [`ssh`](#ssh--terminal-protocol) · [`port-forward`](#port-forward) · [`expose`](#expose)
@@ -31,14 +31,14 @@ boxctl rm my-box                            # done
 |---|---|
 | `login` / `logout` | Save or forget your personal token |
 | `create`, `ls`, `rm`, `pause`, `resume`, `keep` | Box lifecycle (`rm`/`pause`/`resume` also take `all`) |
-| `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`, `:repos` (your GitHub repos, newest push first; enter starts `claude --repo` on one, `g` a `--goal` run, `a` adds one to the backlog), `:backlog`, `:runs`; `/` to filter |
+| `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`, `:repos` (your GitHub repos, newest push first; enter starts `claude --repo` on one, `g` a `--goal` run, `a` adds one to the backlog), `:tasks`, `:runs`; `/` to filter |
 | `images`, `sizes` | What you can boot, and at what size |
 | `ssh`, `ssh-proxy` | Shell or one-off command; real `ssh`/`scp`/`rsync` through a proxy |
 | `cp` | Copy a file or directory (`-r`) between a box and this machine, any size |
 | `port-forward`, `expose`, `unexpose` | Reach a box port locally, or publish it on the internet |
 | `backups`, `restore` | Saved copies of paused boxes |
 | `claude` | Run a coding agent on a box with your project |
-| `backlog` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:backlog` in the tui) |
+| `tasks` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:tasks` in the tui) |
 | `runs` | Every run of every backlog item, going and ended (`:runs` in the tui) |
 
 Run `boxctl <command> --help` for flags.
@@ -466,7 +466,7 @@ It all runs over real ssh to the box's sshd, as root, with the key in
 `~/.boxctl/claude/id_ed25519` (authorized on the box over `boxctl ssh`),
 tunneled by `boxctl ssh-proxy`.
 
-## The backlog (`boxctl backlog`)
+## Tasks (`boxctl tasks`)
 
 A backlog of goals, each ending in one pull request, worked on a few at a
 time by unattended `boxctl claude --goal` runs, each on a box of its own.
@@ -480,18 +480,18 @@ Once a goal has its pull request, the backlog watches it until you merge it:
   (`git merge`, never a rebase or force-push) and resolves it.
 - **It's behind its base:** GitHub is asked to update the branch, and
   it's ready again only once CI passes on the result.
-- **Green and up to date:** "ready to merge". `boxctl backlog merge <id>`
-  (or `m` in `:backlog`) merges it at the commit CI passed on
+- **Green and up to date:** "ready to merge". `boxctl tasks merge <id>`
+  (or `m` in `:tasks`) merges it at the commit CI passed on
   (`--match-head-commit`). Nothing is merged without you.
 
 ```bash
-boxctl backlog add --repo owner/name "bump Go to 1.26 and fix what breaks"
-boxctl backlog add -p 5 "add --json to ls"     # this directory's repo; higher priority starts first
-boxctl backlog                                 # ID, state, run, PR, what it's waiting for
+boxctl tasks add --repo owner/name "bump Go to 1.26 and fix what breaks"
+boxctl tasks add -p 5 "add --json to ls"     # this directory's repo; higher priority starts first
+boxctl tasks                                 # ID, state, run, PR, what it's waiting for
 boxctl runs                                    # every run: item, kind, box, how it's going or ended
-boxctl backlog limit --global 4 --per-repo 2   # runs at once (default 2: an account's box limit)
-boxctl backlog merge 3 ; boxctl backlog cancel 4 ; boxctl backlog retry 5
-boxctl backlog dispatch                        # run the passes here with no screen
+boxctl tasks limit --global 4 --per-repo 2   # runs at once (default 2: an account's box limit)
+boxctl tasks merge 3 ; boxctl tasks cancel 4 ; boxctl tasks retry 5
+boxctl tasks dispatch                        # run the passes here with no screen
 ```
 
 Each kind of run (`code`, `ci_fix`, `conflict_fix`) gets 2 attempts per
@@ -501,7 +501,7 @@ A goal's boxes are deleted when its next run starts, and when it's merged
 or cancelled. A refused box (your account's limit, a full fleet) costs
 nothing; new runs wait 2 minutes.
 
-In the tui, `:backlog` is the goals and `:runs` the runs, going and
+In the tui, `:tasks` is the goals and `:runs` the runs, going and
 ended; enter on a goal shows its runs. In `:runs`, `s` and `l` open a
 run's shell and log while its box is there, and ctrl-d kills a run
 that's going: its box is deleted and the goal waits for you (it counts
@@ -509,7 +509,7 @@ as one of that kind's attempts), with nothing more started for it until
 `r` retries it.
 
 Nothing moves unless something runs the passes, every 30s: `boxctl tui`
-does while it's open, whatever view you're in, and `boxctl backlog
+does while it's open, whatever view you're in, and `boxctl tasks
 dispatch` does with no screen. Only one runs them at a time. Runs
 already on boxes carry on while neither is open. The backlog lives in
 `~/.boxctl/backlog.json`; each run's `boxctl claude` output is in

@@ -469,7 +469,7 @@ func TestParseBacklogLimit(t *testing.T) {
 	}
 }
 
-// TestTUIBacklogLimit: L in :backlog asks for the slot limit and saves it.
+// TestTUIBacklogLimit: L in :tasks asks for the slot limit and saves it.
 func TestTUIBacklogLimit(t *testing.T) {
 	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	tuiFlashFor = time.Millisecond
@@ -508,6 +508,10 @@ func TestBacklogCommandNames(t *testing.T) {
 	}
 	if c, _, _ := rootCmd.Find([]string{"backlog", "dispatch"}); c != backlogDispatchCmd {
 		t.Errorf("backlog dispatch = %s", c.CommandPath())
+	}
+	// tasks is the name (backlog was too close to backups); backlog stays an alias.
+	if c, _, _ := rootCmd.Find([]string{"tasks", "dispatch"}); c != backlogDispatchCmd {
+		t.Errorf("tasks dispatch = %s", c.CommandPath())
 	}
 	if c, _, _ := rootCmd.Find([]string{"runs"}); c != runsCmd {
 		t.Errorf("runs = %s", c.CommandPath())

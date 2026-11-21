@@ -33,7 +33,7 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your boxes in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your boxes, laid out like k9s.
 
-  :boxes :urls :images :sizes :backups :repos :backlog :runs   switch view (also :q, :help, :create)
+  :boxes :urls :images :sizes :backups :repos :tasks :runs   switch view (also :q, :help, :create)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the box; y its JSON; l a --goal run's log
@@ -41,16 +41,16 @@ var tuiCmd = &cobra.Command{
   enter        in :repos (your GitHub repos, newest push first, from gh),
                start Claude on a fresh box with the repo cloned (boxctl claude --repo)
   g            in :repos, ask for a goal and run it unattended there (--goal)
-  a            in :repos or :backlog, add a goal (boxctl backlog): run when a slot
+  a            in :repos or :tasks, add a goal (boxctl tasks): run when a slot
                is free, its PR watched -- CI and conflicts get follow-up runs;
-               (in :backlog the repository is picked from a list: type to narrow,
+               (in :tasks the repository is picked from a list: type to narrow,
                up/down to select, tab to complete);
-               in :backlog m merges a ready PR, r retries, ctrl-d cancels, o opens it,
+               in :tasks m merges a ready PR, r retries, ctrl-d cancels, o opens it,
                enter shows the item's runs
   :runs        every backlog run, going and ended (boxctl runs): s / l a run's
                shell / log while its box is there, ctrl-d kills a run that's going
                (its box deleted, its item left to you until r)
-               While the tui is open it runs the backlog (as boxctl backlog dispatch does).
+               While the tui is open it runs the backlog (as boxctl tasks dispatch does).
   c            create a box (name, image and size are asked)
   p / r / K    pause / resume / keep (hold off the idle reaper's deletion)
   e            expose a port at a public URL; ctrl-d in :urls takes it down
@@ -216,12 +216,17 @@ type tuiModel struct {
 	filtering   bool // typing in the filter prompt
 	command     textinput.Model
 	commanding  bool // typing in the : prompt
-	dialog      *tuiDialog
-	create      *tuiCreateForm
-	creating    bool
-	pending     map[string]string // box -> verb in flight
-	spin        bspinner.Model
-	spinning    bool
+	// cycle is the commands tab steps through in the : prompt: those the
+	// text typed before the first tab starts. nil until tab, and again
+	// after any other key.
+	cycle    []string
+	cycleAt  int
+	dialog   *tuiDialog
+	create   *tuiCreateForm
+	creating bool
+	pending  map[string]string // box -> verb in flight
+	spin     bspinner.Model
+	spinning bool
 
 	flash    string
 	flashErr bool
@@ -247,7 +252,7 @@ func newTUI(c *client.Client) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, backlog, runs, create, help, q"
+	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, tasks, runs, create, help, q"
 	cmd.CharLimit = 80
 	// Typing shows the first command the text starts, greyed out after it;
 	// tab takes it, up/down (ctrl-n/ctrl-p) step through the others.

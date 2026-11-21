@@ -12,10 +12,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// `:backlog`: boxctl backlog in the tui. The rows are ~/.boxctl/backlog.json,
+// `:tasks`: boxctl tasks in the tui. The rows are ~/.boxctl/backlog.json,
 // read again on every refresh; the passes that move it (backlogdispatch.go) run
 // every backlogPassEvery while the tui is open, whatever view is shown --
-// the tui is the backlog's loop unless `boxctl backlog dispatch` already is.
+// the tui is the backlog's loop unless `boxctl tasks dispatch` already is.
 
 type (
 	tuiBacklogPassMsg struct {
@@ -29,8 +29,9 @@ type (
 )
 
 var backlogView = &tableView{
-	name:     "backlog",
-	title:    "Backlog",
+	name:     "tasks",
+	aliases:  []string{"task", "backlog"},
+	title:    "Tasks",
 	resource: "backlog",
 	columns:  []column{{"ID", 'I'}, {"PRI", 'P'}, {"REPO", 'R'}, {"STATE", 'S'}, {"RUN", 0}, {"PR", 0}, {"NOTE", 'N'}, {"GOAL", 'G'}},
 	stateCol: 3,
@@ -127,7 +128,7 @@ func (m *tuiModel) backlogPassed(msg tuiBacklogPassMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// backlogItem is the item under the cursor in :backlog.
+// backlogItem is the item under the cursor in :tasks.
 func (m *tuiModel) backlogItem() *backlog.Item {
 	if m.backlog == nil || m.top().view != backlogView {
 		return nil
@@ -151,7 +152,7 @@ func (m *tuiModel) backlogChange(text string, fn func() error) tea.Cmd {
 	}
 }
 
-// handleBacklogKey is :backlog's own keys; handled says whether key was one.
+// handleBacklogKey is :tasks's own keys; handled says whether key was one.
 func (m tuiModel) handleBacklogKey(key string) (tea.Model, tea.Cmd, bool) {
 	it := m.backlogItem()
 	switch key {
@@ -351,7 +352,7 @@ func parseBacklogLimit(s string) (int, *int, error) {
 func (m tuiModel) askBacklogGoal(repo string) (tea.Model, tea.Cmd) {
 	cmd := m.promptText("Add a goal on "+repo, []string{
 		"It runs unattended (boxctl claude --goal) when a slot is free, and ends in a pull request",
-		"that :backlog then watches: CI and conflicts get follow-up runs; m merges it once it's green.",
+		"that :tasks then watches: CI and conflicts get follow-up runs; m merges it once it's green.",
 	}, "what to do, e.g. bump Go and fix what breaks", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		if value == "" {
 			return m, m.fail("a goal is needed")
@@ -364,7 +365,7 @@ func (m tuiModel) askBacklogGoal(repo string) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// describeBacklogItem is :backlog's describe page.
+// describeBacklogItem is :tasks's describe page.
 func describeBacklogItem(it *backlog.Item) []string {
 	kv := func(k, v string) string { return fmt.Sprintf("%-12s%s", k+":", v) }
 	lines := []string{
@@ -401,7 +402,7 @@ func describeBacklogItem(it *backlog.Item) []string {
 	return lines
 }
 
-// backlogSummary is the header's Backlog line in :backlog: how many items run,
+// backlogSummary is the header's Backlog line in :tasks: how many items run,
 // wait and need you, against the limit -- or who runs the backlog instead.
 func (m tuiModel) backlogSummary() string {
 	if m.backlogHeld != "" {

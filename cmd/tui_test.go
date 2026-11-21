@@ -151,6 +151,10 @@ func press(t *testing.T, m tuiModel, key string) (tuiModel, tea.Cmd) {
 		msg = tea.KeyMsg{Type: tea.KeyCtrlD}
 	case "tab":
 		msg = tea.KeyMsg{Type: tea.KeyTab}
+	case "shift+tab":
+		msg = tea.KeyMsg{Type: tea.KeyShiftTab}
+	case "backspace":
+		msg = tea.KeyMsg{Type: tea.KeyBackspace}
 	case "down":
 		msg = tea.KeyMsg{Type: tea.KeyDown}
 	case "up":
@@ -740,8 +744,9 @@ func TestBareRootHelpOffTerminal(t *testing.T) {
 	}
 }
 
-// TestTUICommandComplete: tab in the : prompt takes the suggested command,
-// down steps to the next one that matches.
+// TestTUICommandComplete: tab in the : prompt takes the first command the
+// typed text starts, tab again the next one (wrapping), shift-tab the one
+// before; down steps through the suggestions as before.
 func TestTUICommandComplete(t *testing.T) {
 	m := newTUI(nil)
 	m = typeIn(t, m, ":ba")
@@ -750,11 +755,33 @@ func TestTUICommandComplete(t *testing.T) {
 		t.Fatalf(":ba<tab> = %q, want backups", got)
 	}
 	m, _ = press(t, m, "esc")
-	m = typeIn(t, m, ":ba")
-	m, _ = press(t, m, "down")
+	m = typeIn(t, m, ":r")
+	for i, want := range []string{"repos", "runs", "repos"} {
+		m, _ = press(t, m, "tab")
+		if got := m.command.Value(); got != want {
+			t.Fatalf(":r + %d tabs = %q, want %s", i+1, got, want)
+		}
+	}
+	m, _ = press(t, m, "shift+tab")
+	if got := m.command.Value(); got != "runs" {
+		t.Fatalf("shift-tab = %q, want runs", got)
+	}
+	// Typing after a tab starts a new cycle from what's there now.
+	m, _ = press(t, m, "backspace")
+	m, _ = press(t, m, "backspace")
+	m, _ = press(t, m, "backspace")
 	m, _ = press(t, m, "tab")
-	if got := m.command.Value(); got != "backlog" {
-		t.Fatalf(":ba<down><tab> = %q, want backlog", got)
+	if got := m.command.Value(); got != "repos" {
+		t.Fatalf(":r<tab> after editing = %q, want repos", got)
+	}
+	m, _ = press(t, m, "esc")
+	m = typeIn(t, m, ":ta")
+	m, _ = press(t, m, "tab")
+	if got := m.command.Value(); got != "tasks" {
+		t.Fatalf(":ta<tab> = %q, want tasks", got)
+	}
+	if findView("tasks") != backlogView || findView("backlog") != backlogView {
+		t.Fatalf(":tasks and :backlog should both open the tasks view")
 	}
 	m, _ = press(t, m, "esc")
 	m = typeIn(t, m, ":re")

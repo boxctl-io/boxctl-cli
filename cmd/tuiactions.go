@@ -58,6 +58,13 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // --- the : prompt ---------------------------------------------------------
 
 func (m tuiModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if k := msg.String(); k == "tab" || k == "shift+tab" {
+		if m.completeCommand(k == "tab") {
+			return m, nil
+		}
+	} else {
+		m.cycle = nil
+	}
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.commanding = false
@@ -73,6 +80,42 @@ func (m tuiModel) handleCommandKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.command, cmd = m.command.Update(msg)
 	return m, cmd
+}
+
+// completeCommand is tab (forward) or shift-tab in the : prompt: the first
+// press takes the first command the typed text starts, each next one the
+// next such command, wrapping -- so `:r` tab tab tab goes repos, runs,
+// repos, instead of sticking on the first.
+// False leaves the key to the text input (a line with arguments).
+func (m *tuiModel) completeCommand(forward bool) bool {
+	if m.cycle == nil {
+		typed := strings.ToLower(m.command.Value())
+		if strings.ContainsAny(typed, " \t") {
+			return false
+		}
+		var matches []string
+		for _, n := range commandNames() {
+			if strings.HasPrefix(n, typed) {
+				matches = append(matches, n)
+			}
+		}
+		if len(matches) == 0 {
+			return true
+		}
+		m.cycle, m.cycleAt = matches, -1
+		if !forward {
+			m.cycleAt = 0
+		}
+	}
+	step := 1
+	if !forward {
+		step = -1
+	}
+	n := len(m.cycle)
+	m.cycleAt = ((m.cycleAt+step)%n + n) % n
+	m.command.SetValue(m.cycle[m.cycleAt])
+	m.command.CursorEnd()
+	return true
 }
 
 // runCommand is a `:` command: a view's name, q, help or create.
@@ -103,7 +146,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	return m, m.fail("unknown command %q (try :boxes, :urls, :images, :sizes, :backups, :repos, :backlog, :runs, :help, :q)", words[0])
+	return m, m.fail("unknown command %q (try :boxes, :urls, :images, :sizes, :backups, :repos, :tasks, :runs, :help, :q)", words[0])
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -508,7 +551,7 @@ func (m *tuiModel) pushHelp() {
 	}
 	lines := []string{"General", ""}
 	general := [][2]string{
-		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos, backlog, runs (`:boxes web` filters too; tab completes)"},
+		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos, tasks, runs (`:boxes web` filters too; tab completes, tab again cycles the matches)"},
 		{":create", "create a box"}, {":ssh <box>", "open a terminal on a box"},
 		{":help", "this page"}, {":q", "quit (ctrl-c too)"},
 		{"/text", "filter the rows; esc clears"},
