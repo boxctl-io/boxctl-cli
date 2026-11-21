@@ -240,3 +240,49 @@ func TestTUIRunsSortByItem(t *testing.T) {
 		t.Errorf("by item = %q", got)
 	}
 }
+
+// r in :runs resumes a run's paused box (a goal box the idle reaper
+// paused once its run ended), p pauses a running one; both refuse the
+// wrong state, and a run whose box is gone says so.
+func TestTUIRunsPauseResume(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
+	tuiFlashFor = time.Millisecond
+	vms := runsFixture(t)
+	vms[0].State = "paused" // q3-code-1, the failed run's box
+	c, calls := fakeBoxServer(t, vms)
+	m := runsTUI(t, c, vms)
+	next, _ := m.runCommand("runs")
+	m = next.(tuiModel)
+
+	m.top().selected = "3/1"
+	m2, cmd := press(t, m, "p")
+	if hasAction(cmd) != nil || !strings.Contains(m2.flash, "not running") {
+		t.Errorf("p on a paused box: flash %q", m2.flash)
+	}
+	m2, cmd = press(t, m, "r")
+	if hasAction(cmd) == nil || m2.pending["q3-code-1"] != "resume" {
+		t.Fatalf("r on a paused box: pending %v, flash %q", m2.pending, m2.flash)
+	}
+	if len(*calls) != 1 || (*calls)[0] != "POST /api/vms/q3-code-1/resume" {
+		t.Errorf("server saw %v", *calls)
+	}
+	*calls = nil
+
+	m.top().selected = "3/3"
+	m2, cmd = press(t, m, "r")
+	if hasAction(cmd) != nil || !strings.Contains(m2.flash, "not paused") {
+		t.Errorf("r on a running box: flash %q", m2.flash)
+	}
+	m2, cmd = press(t, m, "p")
+	if hasAction(cmd) == nil || m2.pending["q3-ci-3"] != "pause" {
+		t.Fatalf("p on a running box: pending %v, flash %q", m2.pending, m2.flash)
+	}
+	if len(*calls) != 1 || (*calls)[0] != "POST /api/vms/q3-ci-3/pause" {
+		t.Errorf("server saw %v", *calls)
+	}
+
+	m.top().selected = "3/2"
+	if m2, _ = press(t, m, "r"); !strings.Contains(m2.flash, "its box is gone") {
+		t.Errorf("r on a gone box: flash %q", m2.flash)
+	}
+}

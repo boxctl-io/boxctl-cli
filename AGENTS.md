@@ -485,7 +485,8 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   is retried. `runs.go`'s `backlogRuns` are the rows of both `boxctl runs`
   and `:runs` (going first, then newest; a run going with no box is
   `starting` before `Launched`, `gone` after); `page.item` scopes `:runs`
-  to one item (enter on it in `:backlog`). In `:runs`, `s`/`l` work on any
+  to one item (enter on it in `:backlog`). In `:runs`, `s`/`a`/`l` and `p`/`r`
+  (pause/resume, `pauseBox`/`resumeBox`, as in `:boxes`) work on any
   run whose box is listed, ended ones included. `:backlog`'s
   `a` asks for the repository from a list (`backlogRepoChoices`: the current
   item's, the queued ones, then `:repos`' cache, loaded through
