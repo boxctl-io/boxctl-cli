@@ -447,8 +447,8 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   (boxctl-orchestrator's `docs/designs/boxctl_orchestrator.md`) built into
   the CLI on top of goal runs, instead of its own runner, SQLite and
   harness. It was `boxctl queue`/`:queue` until the split; there is no
-  alias. `internal/backlog` is the state (`~/.boxctl/backlog.json`, written
-  only through `Update`, which holds `backlog.json.lock`) and `Decide`, the
+  alias. `internal/backlog` is the state (`~/.boxctl/backlog.json`, one item per line
+  (`encode`), written only through `Update`, which holds `backlog.json.lock`) and `Decide`, the
   pure engine: one pass's observations (every box's `run_status` from one
   `List`, each PR from one GraphQL query) in, state changes made and
   actions out -- tested as tables, keep it free of I/O. The
