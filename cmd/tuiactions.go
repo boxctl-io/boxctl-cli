@@ -50,8 +50,11 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return next, tea.Batch(cmds...)
 	}
-	if m.top().kind == pageText {
+	switch m.top().kind {
+	case pageText:
 		return m.handleTextKey(msg)
+	case pageHome:
+		return m.handleHomeKey(msg)
 	}
 	return m.handleTableKey(msg)
 }
@@ -85,6 +88,9 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 	switch words[0] {
 	case "q", "quit", "exit":
 		return m, tea.Quit
+	case "home", "main":
+		m.goHome()
+		return m, nil
 	case "help", "h", "?":
 		m.pushHelp()
 		return m, nil
@@ -104,7 +110,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	return m, m.fail("unknown command %q (try :boxes, :urls, :images, :sizes, :backups, :repos, :backlog, :runs, :help, :q)", words[0])
+	return m, m.fail("unknown command %q (try :home, :boxes, :urls, :images, :sizes, :backups, :repos, :backlog, :runs, :help, :q)", words[0])
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -507,7 +513,7 @@ func (m tuiModel) handleTextKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // pushHelp shows the keys: the view's hotkeys, the common ones, and the
 // sort letters.
 func (m *tuiModel) pushHelp() {
-	v := boxesView
+	var v *tableView // nil on home: the general keys only
 	for i := len(m.pages) - 1; i >= 0; i-- {
 		if m.pages[i].kind == pageTable {
 			v = m.pages[i].view
@@ -518,15 +524,22 @@ func (m *tuiModel) pushHelp() {
 	general := [][2]string{
 		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos, backlog, runs (`:boxes web` filters too; tab completes)"},
 		{"b/t/u/h", "switch to :boxes, :backlog, :runs, :repos with one key (in a table)"},
+		{":home", "the home page, a tile per view (esc from a view goes there too)"},
 		{":create", "create a box"}, {":ssh <box>", "open a terminal on a box"},
 		{":help", "this page"}, {":q", "quit (ctrl-c too)"},
 		{"/text", "filter the rows; esc clears"},
 		{"j/k ↑/↓", "move; ctrl-f/ctrl-b page; g/G top/bottom"},
 		{"shift+letter", "sort by that column (again: the other way)"},
-		{"esc", "back to the previous page"}, {"R", "refresh now (also every " + tuiRefreshEvery.String() + ")"},
+		{"esc", "back to the previous page (from a view: home)"}, {"R", "refresh now (also every " + tuiRefreshEvery.String() + ")"},
 	}
 	for _, g := range general {
 		lines = append(lines, fmt.Sprintf("  %-14s %s", g[0], g[1]))
+	}
+	if v == nil {
+		lines = append(lines, "", "Home", "",
+			"  ←↑↓→ (j/k, tab) move between tiles; enter opens the view; c creates a box.")
+		m.push(page{kind: pageText, title: "help", lines: lines})
+		return
 	}
 	lines = append(lines, "", v.title, "")
 	for _, h := range v.hotkeys {
