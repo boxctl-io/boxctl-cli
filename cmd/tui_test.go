@@ -361,6 +361,17 @@ func TestTUIListAndKeys(t *testing.T) {
 		t.Errorf("server saw %v", *calls)
 	}
 
+	// A bare q on the top view doesn't quit; :q does.
+	m, cmd = press(t, m, "q")
+	if cmd != nil {
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			t.Error("q quit the tui")
+		}
+	}
+	if !strings.Contains(m.flash, ":q") {
+		t.Errorf("q: flash=%q", m.flash)
+	}
+
 	// An unknown command is refused; :q quits.
 	m, _ = press(t, m, ":")
 	m = typeIn(t, m, "pods")
