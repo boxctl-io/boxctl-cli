@@ -348,11 +348,13 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "q":
+		// q only goes back: quitting is :q (or ctrl-c), so a stray q on
+		// the top view doesn't close the tui.
 		if len(m.pages) > 1 {
 			m.pop()
 			return m, nil
 		}
-		return m, tea.Quit
+		return m, m.say("type :q to quit")
 	case "R", "ctrl+r", "f5":
 		if t.view == reposView {
 			return m, tea.Batch(m.refresh(), m.listRepos(true), m.spinIfBusy())
