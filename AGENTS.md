@@ -155,7 +155,9 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   default, with an optional size after it, and runs `Client.Restore` --
   which polls with a spinner on stderr, so `tui`'s `RunE` first calls
   `client.QuietProgress`, the one thing in `internal/client` that exists
-  for the tui), `0/1/2` for all/running/paused (k9s's namespace keys), and
+  for the tui), `0/1/2` for all/running/paused (k9s's namespace keys), `b`/`t`/`u`/`h`
+  jumping straight to `:boxes`/`:backlog`/`:runs`/`:repos` from any table
+  (`screenKeys` in `tuiviews.go`, which must stay free in every view), and
   the box actions (`s` shell, `p`/`r`/`K`, `l` logs: `logsScript` over
   `Client.Exec` through `logFormatter`, so it needs no ssh key). Every
   action is the matching `Client` call the subcommand makes, and the

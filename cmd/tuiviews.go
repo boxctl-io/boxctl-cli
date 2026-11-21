@@ -65,6 +65,38 @@ var commonHotkeys = []hotkey{
 	{":", "command"}, {"/", "filter"}, {"?", "help"}, {"esc", "back"}, {"ctrl-c", "quit"},
 }
 
+// screenKeys switch to the agent flow's main views with one keystroke
+// from any table view: the repositories to start from, the backlog of
+// goals, the runs working on them, and the boxes they run on. Each key is
+// free in every table view (none is a view's hotkey or a sort letter, as
+// those are uppercase); in a text page b still pages up, so there esc
+// comes first.
+var screenKeys = []struct {
+	key  string
+	view *tableView
+}{
+	{"b", boxesView}, {"t", backlogView}, {"u", runsView}, {"h", reposView},
+}
+
+// screenFor is the view key switches to, nil for none.
+func screenFor(key string) *tableView {
+	for _, s := range screenKeys {
+		if s.key == key {
+			return s.view
+		}
+	}
+	return nil
+}
+
+// screenHotkeys are screenKeys for the header and the help page.
+func screenHotkeys() []hotkey {
+	var keys []hotkey
+	for _, s := range screenKeys {
+		keys = append(keys, hotkey{s.key, ":" + s.view.name})
+	}
+	return keys
+}
+
 // The order is also tab completion's at the : prompt, which takes the first
 // match: backlog comes before backups so `:back<tab>` is the backlog, the
 // view opened far more often (down/ctrl-n still steps on to backups).
