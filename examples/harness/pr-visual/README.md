@@ -3,7 +3,7 @@
 The built-in `pr-only` harness (`cmd/harness-pr-only`: work on a branch,
 open a pull request, never merge) plus what a run needs so its result can
 be checked by eye and so the next run doesn't relearn what this one did.
-It is the harness the Linear-issue runs on boxctl's own repositories use.
+It is the harness the runs on boxctl's own repositories use.
 
     mkdir -p ~/.boxctl/harness && cp -r examples/harness/pr-visual ~/.boxctl/harness/
     boxctl claude --harness pr-visual --goal "..."
