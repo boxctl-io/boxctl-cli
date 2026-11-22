@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>boxctl dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" integrity="sha384-n2n7twoohnW+d3myBKaUgl7DSiwidw6MkQy9oesGzkPpMjejKRR3XlnD+5yCdtBD" crossorigin="anonymous">
+<style>
+:root {
+  --bg: #0d1117; --panel: #161b22; --panel2: #1c2230; --line: #2a3140;
+  --text: #d8dee9; --dim: #7d8899; --accent: #4fb6ff; --accent2: #8be9fd;
+  --ok: #3fb950; --warn: #d29922; --err: #f85149; --other: #8b949e;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+.logo { font: 700 18px var(--mono); color: var(--accent2); letter-spacing: .5px; }
+.logo span { color: var(--dim); font-weight: 400; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav button { background: none; border: 1px solid transparent; color: var(--dim); padding: 6px 12px; border-radius: 6px; cursor: pointer; font: 13px var(--sans); }
+nav button:hover { color: var(--text); background: var(--panel2); }
+nav button.on { color: var(--text); background: var(--panel2); border-color: var(--line); }
+nav .count { font: 11px var(--mono); color: var(--dim); margin-left: 4px; }
+.spacer { flex: 1; }
+.meta { font: 12px var(--mono); color: var(--dim); }
+main { padding: 16px 20px 40px; }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+input, select, textarea { background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 7px 10px; font: 13px var(--sans); }
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { background: var(--panel); color: var(--dim); border: 0; padding: 7px 12px; cursor: pointer; font: 12px var(--sans); }
+.seg button.on { background: var(--panel2); color: var(--text); }
+.btn { background: var(--panel2); border: 1px solid var(--line); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; font: 13px var(--sans); white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+.btn.danger { color: var(--err); }
+.btn.danger.solid { background: var(--err); color: #fff; border-color: var(--err); }
+.btn.sm { padding: 3px 8px; font-size: 12px; }
+.tablewrap { border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; background: var(--panel); }
+table { width: 100%; border-collapse: collapse; font: 13px var(--mono); }
+th { text-align: left; color: var(--dim); font-weight: 500; padding: 9px 12px; border-bottom: 1px solid var(--line); cursor: pointer; user-select: none; white-space: nowrap; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+th.sorted { color: var(--accent2); }
+td { padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--panel2); }
+tbody tr.clickable { cursor: pointer; }
+td.actions { text-align: right; }
+td.actions .btn { margin-left: 4px; }
+.state { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--other); }
+.s-running .dot { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.s-paused .dot { background: var(--warn); }
+.s-provisioning .dot, .s-stopping .dot, .s-pending .dot { background: var(--accent); animation: pulse 1s infinite alternate; }
+.s-active .dot, .s-uploaded .dot { background: var(--ok); }
+.s-failed .dot { background: var(--err); }
+@keyframes pulse { from { opacity: .3 } to { opacity: 1 } }
+.dim { color: var(--dim); }
+.empty { padding: 40px; text-align: center; color: var(--dim); font-family: var(--sans); }
+.busy { opacity: .55; }
+.spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--dim); border-top-color: transparent; border-radius: 50%; animation: rot .7s linear infinite; vertical-align: -1px; }
+@keyframes rot { to { transform: rotate(360deg) } }
+#toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; max-width: min(480px, calc(100vw - 32px)); }
+.toast { background: var(--panel2); border: 1px solid var(--line); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 6px; font-size: 13px; box-shadow: 0 6px 24px #0008; word-break: break-word; }
+.toast.err { border-left-color: var(--err); }
+.toast.ok { border-left-color: var(--ok); }
+.overlay { position: fixed; inset: 0; background: #000a; display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+.overlay.open { display: flex; }
+.dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; width: min(520px, 100%); padding: 20px; max-height: calc(100vh - 32px); overflow: auto; }
+.dialog h2 { margin: 0 0 12px; font-size: 16px; }
+.dialog p { color: var(--dim); margin: 0 0 12px; }
+.dialog .warn { color: var(--warn); }
+.dialog label { display: block; font-size: 12px; color: var(--dim); margin: 12px 0 4px; }
+.dialog input, .dialog select { width: 100%; }
+.dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.hint { font-size: 12px; color: var(--dim); margin-top: 4px; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 100vw); background: var(--panel); border-left: 1px solid var(--line); transform: translateX(100%); transition: transform .18s; z-index: 15; display: flex; flex-direction: column; }
+.drawer.open { transform: none; box-shadow: -12px 0 40px #0008; }
+.drawer .head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.drawer .head h2 { margin: 0; font: 600 15px var(--mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.drawer .tabs { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); }
+.drawer .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--dim); padding: 8px 10px; cursor: pointer; font: 13px var(--sans); }
+.drawer .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+.drawer .actions { display: flex; gap: 6px; padding: 12px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.drawer pre { margin: 0; padding: 16px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; overflow: auto; flex: 1; }
+#term-overlay .dialog { width: min(1200px, 100%); height: min(820px, 100%); display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+#term-overlay .thead { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+#term-overlay .thead h2 { margin: 0; font: 600 14px var(--mono); flex: 1; }
+#term { flex: 1; padding: 6px; background: #0b0e14; min-height: 0; }
+@media (max-width: 700px) { main { padding: 12px; } header { padding: 10px 12px; } .meta { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">boxctl<span> dashboard</span></div>
+  <nav id="nav"></nav>
+  <div class="spacer"></div>
+  <div class="meta" id="meta"></div>
+</header>
+<main>
+  <div class="toolbar" id="toolbar"></div>
+  <div class="tablewrap" id="table"></div>
+</main>
+
+<aside class="drawer" id="drawer">
+  <div class="head"><h2 id="d-title"></h2><button class="btn sm" id="d-close">Close ✕</button></div>
+  <div class="actions" id="d-actions"></div>
+  <div class="tabs" id="d-tabs"></div>
+  <pre id="d-body"></pre>
+</aside>
+
+<div class="overlay" id="dlg-overlay"><div class="dialog" id="dlg"></div></div>
+
+<div class="overlay" id="term-overlay">
+  <div class="dialog">
+    <div class="thead">
+      <h2 id="term-title"></h2>
+      <span class="dim" id="term-status"></span>
+      <button class="btn sm" id="term-close">Disconnect ✕</button>
+    </div>
+    <div id="term"></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/lib/xterm.js" integrity="sha384-f/1U6Z9wM4D71a5eRXEZnyOTMOvjqxr2XLwh+Go1OvIl3L3tOcvUrzudnhbECwl4" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/lib/addon-fit.js" integrity="sha384-txoiwu4RR2GD3qySbaj+BbzibkLbSJRcfqGYMu6z1EqHil4A2dyBiBW5dlacG6OR" crossorigin="anonymous"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// --- state ----------------------------------------------------------------
+const S = {
+  view: "boxes",
+  boxes: [], images: [], defaultImage: "", sizes: [], backups: [],
+  loaded: {},
+  filter: "", stateFilter: "all",
+  sort: {},            // view -> {col, desc}
+  pending: {},         // box name -> verb
+  drawer: null,        // {kind, key, tab}
+  logs: {},            // box name -> text | {error}
+};
+
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+  const res = await fetch(path, opts);
+  let data = null;
+  try { data = await res.json(); } catch { /* empty */ }
+  if (res.status === 401) throw new Error("This page's session ended; run boxctl dashboard again and use its link.");
+  if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
+  return data;
+}
+
+function toast(msg, kind = "") {
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.textContent = msg;
+  $("toasts").appendChild(el);
+  setTimeout(() => el.remove(), kind === "err" ? 9000 : 4500);
+}
+
+// --- loading --------------------------------------------------------------
+async function load(what) {
+  try {
+    if (what === "boxes") S.boxes = await api("GET", "/api/boxes");
+    if (what === "images") { const r = await api("GET", "/api/images"); S.images = r.images || []; S.defaultImage = r.default; }
+    if (what === "sizes") S.sizes = await api("GET", "/api/sizes") || [];
+    if (what === "backups") S.backups = await api("GET", "/api/backups") || [];
+    S.loaded[what] = true;
+    S.loadErr = null;
+  } catch (e) {
+    S.loadErr = e.message;
+  }
+  render();
+}
+
+const VIEWS = {
+  boxes: { title: "Boxes", source: "boxes" },
+  urls: { title: "Public URLs", source: "boxes" },
+  images: { title: "Images", source: "images" },
+  sizes: { title: "Sizes", source: "sizes" },
+  backups: { title: "Backups", source: "backups" },
+};
+
+function setView(v) {
+  S.view = v; S.filter = "";
+  location.hash = v;
+  if (!S.loaded[VIEWS[v].source]) load(VIEWS[v].source);
+  render();
+}
+
+// --- rendering --------------------------------------------------------------
+function stateCell(s) {
+  return `<span class="state s-${esc(s)}"><span class="dot"></span>${esc(s)}</span>`;
+}
+function counts() {
+  const urls = S.boxes.reduce((n, b) => n + (b.ingress || []).length, 0);
+  return { boxes: S.boxes.length, urls, images: S.images.length, sizes: S.sizes.length, backups: S.backups.length };
+}
+
+function renderNav() {
+  const c = counts();
+  $("nav").innerHTML = Object.entries(VIEWS).map(([k, v]) =>
+    `<button data-view="${k}" class="${S.view === k ? "on" : ""}">${v.title}${S.loaded[v.source] ? `<span class="count">${c[k]}</span>` : ""}</button>`).join("");
+}
+
+// Each view: columns [{label, get(row) -> sort value, html(row)}], rows(), key(row), click, actions.
+function viewDef() {
+  const v = S.view;
+  if (v === "boxes") return {
+    rows: () => S.boxes.filter((b) => S.stateFilter === "all" || (S.stateFilter === "running" ? b.rank === 0 : b.state === "paused")),
+    key: (b) => b.name,
+    cols: [
+      { label: "Name", get: (b) => b.name, html: (b) => `<b>${esc(b.name)}</b>` },
+      { label: "State", get: (b) => b.rank + b.state, html: (b) => stateCell(b.state) + (S.pending[b.name] ? ` <span class="spin" title="${esc(S.pending[b.name])}"></span>` : "") },
+      { label: "Image", get: (b) => b.image || "-" },
+      { label: "Size", get: (b) => b.size_label },
+      { label: "Age", get: (b) => b.created_at, html: (b) => esc(b.age) },
+      { label: "Run", get: (b) => b.run },
+      { label: "Project", get: (b) => b.project },
+      { label: "PR", get: (b) => b.pr, html: (b) => prLink(b) },
+    ],
+    click: (b) => openDrawer("box", b.name),
+    actions: (b) => boxButtons(b, true),
+    empty: S.boxes.length ? "No boxes match." : "No boxes yet. Create one with the button above.",
+  };
+  if (v === "urls") return {
+    rows: () => S.boxes.flatMap((b) => (b.ingress || []).map((i) => ({ ...i, box: b.name }))),
+    key: (u) => u.box + ":" + u.port,
+    cols: [
+      { label: "Box", get: (u) => u.box, html: (u) => `<b>${esc(u.box)}</b>` },
+      { label: "Port", get: (u) => String(u.port).padStart(5, "0"), html: (u) => esc(u.port) },
+      { label: "URL", get: (u) => u.url, html: (u) => `<a href="${esc(u.url)}" target="_blank" rel="noopener">${esc(u.url)}</a>` },
+      { label: "Status", get: (u) => u.status, html: (u) => stateCell(u.status) },
+      { label: "Auth", get: (u) => u.basic_auth_user || "", html: (u) => u.basic_auth ? "basic: " + esc(u.basic_auth_user) : '<span class="dim">-</span>' },
+      { label: "Host Header", get: (u) => u.host_header || "-" },
+    ],
+    actions: (u) => `<button class="btn sm danger" data-act="unexpose" data-box="${esc(u.box)}" data-port="${u.port}">Unexpose</button>`,
+    empty: "No public URLs. Expose a port from a box's actions.",
+  };
+  if (v === "images") return {
+    rows: () => S.images, key: (i) => i.name,
+    cols: [
+      { label: "Name", get: (i) => i.name, html: (i) => `<b>${esc(i.name)}</b>${i.name === S.defaultImage ? ' <span class="dim">(default)</span>' : ""}` },
+      { label: "Provider", get: (i) => i.provider },
+      { label: "Description", get: (i) => i.description },
+    ],
+    actions: (i) => `<button class="btn sm" data-act="create-with" data-image="${esc(i.name)}">Create box</button>`,
+    empty: "No images.",
+  };
+  if (v === "sizes") return {
+    rows: () => S.sizes, key: (s) => s.name,
+    cols: [
+      { label: "Name", get: (s) => s.name, html: (s) => `<b>${esc(s.name)}</b>${s.default ? ' <span class="dim">(default)</span>' : ""}` },
+      { label: "vCPU", get: (s) => String(s.vcpu).padStart(4, "0"), html: (s) => esc(s.vcpu) },
+      { label: "Memory", get: (s) => String(s.mem_mib).padStart(9, "0"), html: (s) => mem(s.mem_mib) },
+      { label: "Disk", get: (s) => String(s.disk_mib).padStart(9, "0"), html: (s) => s.disk_mib ? mem(s.disk_mib) : "-" },
+    ],
+    actions: (s) => `<button class="btn sm" data-act="create-with" data-size="${esc(s.name)}">Create box</button>`,
+    empty: "No sizes.",
+  };
+  if (v === "backups") return {
+    rows: () => S.backups, key: (b) => b.id,
+    cols: [
+      { label: "ID", get: (b) => b.id },
+      { label: "Box", get: (b) => b.vm_name, html: (b) => `<b>${esc(b.vm_name)}</b>` },
+      { label: "Size", get: (b) => String(b.size_bytes).padStart(15, "0"), html: (b) => bytes(b.size_bytes) },
+      { label: "Upload", get: (b) => b.upload_status, html: (b) => stateCell(b.upload_status) + (b.upload_error ? ` <span class="dim">${esc(b.upload_error)}</span>` : "") },
+      { label: "Created", get: (b) => b.created_at, html: (b) => esc(new Date(b.created_at).toLocaleString()) },
+    ],
+    click: (b) => openDrawer("backup", b.id),
+    actions: (b) => `<button class="btn sm" data-act="restore" data-id="${esc(b.id)}">Restore…</button>`,
+    empty: "No backups.",
+  };
+}
+
+function prLink(b) {
+  if (!b.pr || b.pr === "-") return '<span class="dim">-</span>';
+  const url = prURL(b);
+  return url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(b.pr)}</a>` : esc(b.pr);
+}
+function prURL(b) {
+  const st = b.run_status || {};
+  const u = (st.pr_urls && st.pr_urls[0]) || st.pr_url || "";
+  return u.startsWith("https://github.com/") ? u : "";
+}
+function mem(mib) { return mib >= 1024 ? (mib / 1024).toFixed(mib % 1024 ? 1 : 0) + " GiB" : mib + " MiB"; }
+function bytes(n) {
+  const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+  while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+  return (i ? n.toFixed(1) : n) + " " + u[i];
+}
+
+function boxButtons(b, compact) {
+  const busy = !!S.pending[b.name];
+  const dis = (c) => (busy || !c) ? "disabled" : "";
+  const n = esc(b.name);
+  const sm = compact ? "sm" : "";
+  let h = `<button class="btn ${sm}" data-act="terminal" data-box="${n}" ${dis(b.state === "running")}>Terminal</button>`;
+  if (b.state === "paused") h += `<button class="btn ${sm}" data-act="resume" data-box="${n}" ${dis(true)}>Resume</button>`;
+  else h += `<button class="btn ${sm}" data-act="pause" data-box="${n}" ${dis(b.state === "running")}>Pause</button>`;
+  if (!compact) {
+    h += `<button class="btn ${sm}" data-act="keep" data-box="${n}" ${dis(true)} title="Hold off the idle reaper's deletion">Keep</button>`;
+    h += `<button class="btn ${sm}" data-act="expose" data-box="${n}" ${dis(true)}>Expose port…</button>`;
+    h += `<button class="btn ${sm}" data-act="session" data-box="${n}" ${dis(b.state === "running")} title="A persistent shell (ssh --session); survives a disconnect">Persistent shell…</button>`;
+  }
+  h += `<button class="btn ${sm} danger" data-act="delete" data-box="${n}" ${dis(true)}>Delete</button>`;
+  return h;
+}
+
+function renderToolbar() {
+  let h = `<input id="filter" type="search" placeholder="Filter…" value="${esc(S.filter)}" style="width:220px">`;
+  if (S.view === "boxes") {
+    h += `<div class="seg">` + ["all", "running", "paused"].map((f) =>
+      `<button data-sf="${f}" class="${S.stateFilter === f ? "on" : ""}">${f[0].toUpperCase() + f.slice(1)}</button>`).join("") + `</div>`;
+  }
+  h += `<div class="spacer"></div>`;
+  if (S.loadErr) h += `<span style="color:var(--err)">${esc(S.loadErr)}</span>`;
+  h += `<button class="btn" data-act="refresh">Refresh</button>`;
+  if (S.view === "boxes") h += `<button class="btn primary" data-act="create">+ Create box</button>`;
+  const tb = $("toolbar");
+  const focused = document.activeElement && document.activeElement.id === "filter";
+  const caret = focused ? document.activeElement.selectionStart : null;
+  tb.innerHTML = h;
+  if (focused) { const f = $("filter"); f.focus(); f.setSelectionRange(caret, caret); }
+}
+
+function renderTable() {
+  const def = viewDef();
+  const src = VIEWS[S.view].source;
+  if (!S.loaded[src]) { $("table").innerHTML = `<div class="empty"><span class="spin"></span> Loading…</div>`; return; }
+  let rows = def.rows();
+  const q = S.filter.toLowerCase();
+  if (q) rows = rows.filter((r) => def.cols.some((c) => String(c.get(r) ?? "").toLowerCase().includes(q)));
+  const sort = S.sort[S.view];
+  if (sort) {
+    const c = def.cols[sort.col];
+    rows = [...rows].sort((a, b) => { const x = String(c.get(a) ?? ""), y = String(c.get(b) ?? ""); return (x < y ? -1 : x > y ? 1 : 0) * (sort.desc ? -1 : 1); });
+  }
+  if (!rows.length) { $("table").innerHTML = `<div class="empty">${esc(def.empty)}</div>`; return; }
+  let h = "<table><thead><tr>" + def.cols.map((c, i) =>
+    `<th data-sort="${i}" class="${sort && sort.col === i ? "sorted" : ""}">${c.label}${sort && sort.col === i ? (sort.desc ? " ↓" : " ↑") : ""}</th>`).join("") + "<th></th></tr></thead><tbody>";
+  for (const r of rows) {
+    const key = def.key(r);
+    h += `<tr data-key="${esc(key)}" class="${def.click ? "clickable" : ""} ${S.pending[key] ? "busy" : ""}">` +
+      def.cols.map((c) => `<td>${c.html ? c.html(r) : esc(c.get(r) ?? "-")}</td>`).join("") +
+      `<td class="actions">${def.actions ? def.actions(r) : ""}</td></tr>`;
+  }
+  $("table").innerHTML = h + "</tbody></table>";
+}
+
+function renderMeta() {
+  const live = S.boxes.filter((b) => b.rank === 0).length;
+  const paused = S.boxes.filter((b) => b.state === "paused").length;
+  $("meta").textContent = S.info ? `${live} running · ${paused} paused · ${S.info.api_url} · ${S.info.version}` : "";
+}
+
+function render() {
+  renderNav(); renderToolbar(); renderTable(); renderMeta(); renderDrawer();
+}
+
+// --- drawer (describe / json / logs) ------------------------------------------
+function openDrawer(kind, key) {
+  S.drawer = { kind, key, tab: "describe" };
+  renderDrawer();
+}
+function closeDrawer() { S.drawer = null; renderDrawer(); }
+
+function renderDrawer() {
+  const d = S.drawer, el = $("drawer");
+  if (!d) { el.classList.remove("open"); return; }
+  let obj, describe, tabs = ["describe", "json"];
+  if (d.kind === "box") {
+    obj = S.boxes.find((b) => b.name === d.key);
+    if (!obj) { $("d-title").textContent = d.key + " (gone)"; $("d-actions").innerHTML = ""; $("d-body").textContent = "This box no longer exists."; el.classList.add("open"); return; }
+    describe = (obj.describe || []).join("\n");
+    if (obj.goal_run) tabs.push("logs");
+    $("d-actions").innerHTML = boxButtons(obj, false);
+  } else {
+    obj = S.backups.find((b) => b.id === d.key);
+    if (!obj) { closeDrawer(); return; }
+    describe = [`ID:       ${obj.id}`, `Box:      ${obj.vm_name}`, `Size:     ${bytes(obj.size_bytes)}`, `Upload:   ${obj.upload_status}`, obj.upload_error ? `Error:    ${obj.upload_error}` : "", `Created:  ${new Date(obj.created_at).toLocaleString()}`].filter(Boolean).join("\n");
+    $("d-actions").innerHTML = `<button class="btn" data-act="restore" data-id="${esc(obj.id)}">Restore…</button>`;
+  }
+  $("d-title").textContent = d.key;
+  $("d-tabs").innerHTML = tabs.map((t) => `<button data-tab="${t}" class="${d.tab === t ? "on" : ""}">${t === "json" ? "JSON" : t[0].toUpperCase() + t.slice(1)}</button>`).join("");
+  let body;
+  if (d.tab === "json") {
+    const { describe: _, run: _r, project: _p, branch: _b, pr: _pr, size_label: _s, age: _a, rank: _k, unfinished: _u, goal_run: _g, ...raw } = obj;
+    body = JSON.stringify(raw, null, 2);
+  } else if (d.tab === "logs") {
+    const l = S.logs[d.key];
+    body = l === undefined ? "Reading the log…" : (l.error ? "Couldn't read the log: " + l.error : (l || "(empty log)"));
+  } else body = describe;
+  if ($("d-body").textContent !== body) $("d-body").textContent = body;
+  el.classList.add("open");
+}
+
+async function loadLogs(name) {
+  delete S.logs[name]; renderDrawer();
+  try { S.logs[name] = (await api("GET", `/api/boxes/${encodeURIComponent(name)}/logs`)).log; }
+  catch (e) { S.logs[name] = { error: e.message }; }
+  renderDrawer();
+}
+
+// --- dialogs ------------------------------------------------------------------
+function dialog(html, onSubmit) {
+  $("dlg").innerHTML = `<form id="dlg-form">${html}</form>`;
+  $("dlg-overlay").classList.add("open");
+  const f = $("dlg-form");
+  const first = f.querySelector("input, select");
+  if (first) first.focus(); else f.querySelector("button[type=submit]")?.focus();
+  f.onsubmit = (e) => { e.preventDefault(); const data = Object.fromEntries(new FormData(f)); closeDialog(); onSubmit(data); };
+  f.querySelector("[data-cancel]").onclick = closeDialog;
+}
+function closeDialog() { $("dlg-overlay").classList.remove("open"); $("dlg").innerHTML = ""; }
+
+async function createDialog(preset = {}) {
+  if (!S.loaded.images) await load("images");
+  if (!S.loaded.sizes) await load("sizes");
+  const img = preset.image || S.defaultImage;
+  const def = (S.sizes.find((s) => s.default) || {}).name || "";
+  const size = preset.size || def;
+  dialog(`
+    <h2>Create a box</h2>
+    <p>Like <code>boxctl create [name] --image … --size …</code>. It boots in a few seconds.</p>
+    <label>Name</label><input name="name" placeholder="leave empty for a generated name" autocomplete="off">
+    <label>Image</label><select name="image">${S.images.map((i) => `<option value="${esc(i.name)}" ${i.name === img ? "selected" : ""}>${esc(i.name)}${i.description ? " — " + esc(i.description) : ""}</option>`).join("")}</select>
+    <label>Size</label><select name="size">${S.sizes.map((s) => `<option value="${esc(s.name)}" ${s.name === size ? "selected" : ""}>${esc(s.name)} — ${s.vcpu} vCPU, ${mem(s.mem_mib)}${s.disk_mib ? ", " + mem(s.disk_mib) + " disk" : ""}${s.default ? " (default)" : ""}</option>`).join("")}</select>
+    <div class="row"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn primary">Create</button></div>`,
+  async (d) => {
+    const what = d.name || "a box";
+    const key = d.name || "__new";
+    S.pending[key] = "create"; toast(`Creating ${what} (${d.image}, ${d.size || "default size"})…`);
+    try {
+      const vm = await api("POST", "/api/boxes", { name: d.name, image: d.image, size: d.size });
+      toast(`Created ${vm.name}`, "ok");
+    } catch (e) { toast(`Create failed: ${e.message}`, "err"); }
+    delete S.pending[key];
+    load("boxes");
+  });
+}
+
+function confirmDelete(name) {
+  const b = S.boxes.find((x) => x.name === name);
+  if (!b) return;
+  dialog(`
+    <h2>Delete ${esc(name)}?</h2>
+    <p>This cannot be undone.</p>
+    ${b.unfinished ? `<p class="warn">${esc(name)} is not done (${esc(b.run)}): its work may not be fetched yet.</p>` : ""}
+    <div class="row"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn danger solid">Delete</button></div>`,
+  () => act(name, "delete", () => api("DELETE", `/api/boxes/${encodeURIComponent(name)}`), `Deleted ${name}`));
+}
+
+function exposeDialog(name) {
+  dialog(`
+    <h2>Expose a port on ${esc(name)}</h2>
+    <p>The port gets a public https:// URL (<code>boxctl expose</code>).</p>
+    <label>Port</label><input name="port" type="number" min="1" max="65535" placeholder="3000" required>
+    <div class="row"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn primary">Expose</button></div>`,
+  (d) => act(name, "expose", async () => {
+    const i = await api("POST", `/api/boxes/${encodeURIComponent(name)}/expose`, { port: Number(d.port) });
+    return `${i.url} → ${name} port ${d.port} (${i.status})`;
+  }));
+}
+
+function unexposeDialog(name, port) {
+  dialog(`
+    <h2>Unexpose ${esc(name)} port ${esc(port)}?</h2>
+    <p>Its URL is retired; exposing the port again gives a new one.</p>
+    <div class="row"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn danger solid">Unexpose</button></div>`,
+  () => act(name, "unexpose", () => api("DELETE", `/api/boxes/${encodeURIComponent(name)}/ingress/${port}`), `Unexposed ${name} port ${port}`));
+}
+
+function sessionDialog(name) {
+  dialog(`
+    <h2>Persistent shell on ${esc(name)}</h2>
+    <p>A tmux shell that keeps running when you disconnect (<code>boxctl ssh --session N</code>); shell 1 is the one boxctl.io's dashboard terminal uses.</p>
+    <label>Shell</label><select name="session">${[1, 2, 3, 4, 5].map((n) => `<option>${n}</option>`).join("")}</select>
+    <div class="row"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn primary">Open</button></div>`,
+  (d) => openTerminal(name, Number(d.session)));
+}
+
+async function restoreDialog(id) {
+  const b = S.backups.find((x) => x.id === id);
+  if (!b) return;
+  if (!S.loaded.sizes) await load("sizes");
+  dialog(`
+    <h2>Restore ${esc(b.vm_name)}'s backup</h2>
+    <p>From ${esc(new Date(b.created_at).toLocaleString())}, ${bytes(b.size_bytes)}. Kept at its own size it comes back paused; another size boots it fresh, running.</p>
+    <label>New box name</label><input name="name" value="${esc(b.vm_name)}" required autocomplete="off">
+    <label>Size</label><select name="size"><option value="">its own size</option>${S.sizes.map((s) => `<option value="${esc(s.name)}">${esc(s.name)} — ${s.vcpu} vCPU, ${mem(s.mem_mib)}</option>`).join("")}</select>
+    <div class="row"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn primary">Restore</button></div>`,
+  (d) => {
+    if (S.boxes.some((x) => x.name === d.name)) { toast(`A box named ${d.name} already exists`, "err"); return; }
+    act(d.name, "restore", async () => {
+      const r = await api("POST", `/api/backups/${encodeURIComponent(id)}/restore`, { name: d.name, size: d.size });
+      return `Restored ${r.vm.name} (${r.vm.state})` + (r.notice ? " — " + r.notice : "");
+    }, null, `Restoring ${b.vm_name}'s backup as ${d.name}… (this can take a few minutes)`);
+  });
+}
+
+// act runs one box action with the box marked busy meanwhile.
+async function act(name, verb, fn, okMsg, startMsg) {
+  if (S.pending[name]) { toast(`${name} is busy (${S.pending[name]})`, "err"); return; }
+  S.pending[name] = verb; render();
+  toast(startMsg || `${verb[0].toUpperCase() + verb.slice(1)} ${name}…`);
+  try {
+    const r = await fn();
+    toast(typeof r === "string" ? r : (okMsg || `${verb}: ${name} done`), "ok");
+  } catch (e) {
+    toast(`${verb} ${name}: ${e.message}`, "err");
+  }
+  delete S.pending[name];
+  await load("boxes");
+}
+
+// --- terminal -----------------------------------------------------------------
+let T = null;
+function openTerminal(name, session = 0) {
+  if (!window.Terminal) { toast("The terminal library didn't load (it comes from cdn.jsdelivr.net).", "err"); return; }
+  closeTerminal();
+  $("term-title").textContent = name + (session ? ` — shell ${session}` : "");
+  $("term-status").textContent = "connecting…";
+  $("term-overlay").classList.add("open");
+  const term = new window.Terminal({ cursorBlink: true, fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace', fontSize: 13, theme: { background: "#0b0e14" } });
+  const fit = new window.FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open($("term"));
+  fit.fit();
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const ws = new WebSocket(`${proto}//${location.host}/ws/terminal/${encodeURIComponent(name)}${session ? "?session=" + session : ""}`);
+  ws.binaryType = "arraybuffer";
+  const enc = new TextEncoder();
+  const sendResize = () => {
+    if (ws.readyState !== 1) return;
+    const p = enc.encode(JSON.stringify({ cols: term.cols, rows: term.rows }));
+    const m = new Uint8Array(p.length + 1); m[0] = 1; m.set(p, 1);
+    ws.send(m);
+  };
+  ws.onopen = () => { $("term-status").textContent = "connected"; sendResize(); term.focus(); };
+  ws.onmessage = (e) => term.write(typeof e.data === "string" ? e.data : new Uint8Array(e.data));
+  ws.onclose = (e) => {
+    $("term-status").textContent = "disconnected" + (e.reason ? ": " + e.reason : "");
+    term.write("\r\n\x1b[90m[disconnected" + (e.reason ? ": " + e.reason : "") + "]\x1b[0m\r\n");
+  };
+  term.onData((d) => { if (ws.readyState === 1) ws.send(enc.encode(d)); });
+  term.onBinary((d) => { if (ws.readyState === 1) ws.send(Uint8Array.from(d, (c) => c.charCodeAt(0))); });
+  term.onResize(sendResize);
+  const ro = new ResizeObserver(() => { try { fit.fit(); } catch { /* closed */ } });
+  ro.observe($("term"));
+  T = { term, ws, ro };
+}
+function closeTerminal() {
+  if (!T) return;
+  T.ro.disconnect(); try { T.ws.close(); } catch { /* */ } T.term.dispose(); T = null;
+  $("term").innerHTML = "";
+  $("term-overlay").classList.remove("open");
+}
+
+// --- events -------------------------------------------------------------------
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-view],[data-sf],[data-sort],[data-act],[data-tab],tr[data-key]");
+  if (!t) return;
+  if (t.dataset.view) return setView(t.dataset.view);
+  if (t.dataset.sf) { S.stateFilter = t.dataset.sf; return render(); }
+  if (t.dataset.sort !== undefined) {
+    const i = Number(t.dataset.sort), cur = S.sort[S.view];
+    S.sort[S.view] = cur && cur.col === i ? (cur.desc ? undefined : { col: i, desc: true }) : { col: i, desc: false };
+    return render();
+  }
+  if (t.dataset.tab) {
+    S.drawer.tab = t.dataset.tab;
+    if (t.dataset.tab === "logs" && S.logs[S.drawer.key] === undefined) loadLogs(S.drawer.key);
+    return renderDrawer();
+  }
+  if (t.dataset.act) {
+    e.stopPropagation();
+    const box = t.dataset.box, enc = encodeURIComponent(box || "");
+    switch (t.dataset.act) {
+      case "refresh": return load(VIEWS[S.view].source);
+      case "create": return createDialog();
+      case "create-with": return createDialog({ image: t.dataset.image, size: t.dataset.size });
+      case "terminal": return openTerminal(box);
+      case "session": return sessionDialog(box);
+      case "pause": return act(box, "pause", () => api("POST", `/api/boxes/${enc}/pause`), `Paused ${box}`);
+      case "resume": return act(box, "resume", () => api("POST", `/api/boxes/${enc}/resume`), `Resumed ${box}`);
+      case "keep": return act(box, "keep", async () => {
+        const vm = await api("POST", `/api/boxes/${enc}/keep`);
+        return vm.keep_until ? `Kept ${box} until ${new Date(vm.keep_until).toLocaleString()}` : `Kept ${box}`;
+      });
+      case "expose": return exposeDialog(box);
+      case "unexpose": return unexposeDialog(box, t.dataset.port);
+      case "delete": return confirmDelete(box);
+      case "restore": return restoreDialog(t.dataset.id);
+    }
+    return;
+  }
+  if (t.matches("tr[data-key]")) { const def = viewDef(); const r = def.rows().find((x) => def.key(x) === t.dataset.key); if (r && def.click) def.click(r); }
+});
+document.addEventListener("input", (e) => { if (e.target.id === "filter") { S.filter = e.target.value; renderTable(); } });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if ($("dlg-overlay").classList.contains("open")) return closeDialog();
+    if (T) return; // Esc belongs to the terminal
+    if (S.drawer) return closeDrawer();
+  }
+  if (e.key === "/" && !T && !["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement.tagName)) { e.preventDefault(); $("filter").focus(); }
+});
+$("d-close").onclick = closeDrawer;
+$("term-close").onclick = closeTerminal;
+$("dlg-overlay").addEventListener("mousedown", (e) => { if (e.target.id === "dlg-overlay") closeDialog(); });
+
+// --- start --------------------------------------------------------------------
+(async () => {
+  try { S.info = await api("GET", "/api/info"); } catch { /* shown by load */ }
+  const v = location.hash.slice(1);
+  if (VIEWS[v]) S.view = v;
+  render();
+  await load("boxes");
+  if (VIEWS[S.view].source !== "boxes") load(VIEWS[S.view].source);
+  setInterval(() => { if (!document.hidden) load("boxes"); }, 5000);
+})();
+</script>
+</body>
+</html>
