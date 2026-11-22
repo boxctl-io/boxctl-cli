@@ -11,7 +11,9 @@ import (
 )
 
 // `:runs`: the backlog's runs, going and ended (runs.go's rows), with a
-// run's box keys -- shell, logs, kill. Enter on an item in :backlog opens
+// run's box keys -- shell, logs, pause/resume, kill. Resume is what makes
+// a goal box the idle reaper paused (boxctl.pause-when-done) reachable
+// again without going to :boxes. Enter on an item in :backlog opens
 // it scoped to that item's runs (page.item).
 
 var runsView = &tableView{
@@ -21,7 +23,7 @@ var runsView = &tableView{
 	columns:  []column{{"ITEM", 'I'}, {"REPO", 'R'}, {"KIND", 'K'}, {"BOX", 'B'}, {"STATE", 'S'}, {"AGE", 0}},
 	stateCol: 4,
 	empty:    "No runs yet: a goal in :backlog gets one when there's a slot.",
-	hotkeys:  []hotkey{{"s", "shell"}, {"a", "claude"}, {"l", "logs"}, {"ctrl-d", "kill"}, {"L", "slot limit"}, {"d", "describe"}},
+	hotkeys:  []hotkey{{"s", "shell"}, {"a", "claude"}, {"l", "logs"}, {"p", "pause"}, {"r", "resume"}, {"ctrl-d", "kill"}, {"L", "slot limit"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow
 		for _, r := range m.runRows() {
@@ -67,7 +69,7 @@ func (m tuiModel) handleRunsKey(key string) (tea.Model, tea.Cmd, bool) {
 	case "L":
 		md, cmd := m.askBacklogLimit()
 		return md, cmd, true
-	case "s", "a", "l", "ctrl+d", "enter", "d", "y":
+	case "s", "a", "l", "p", "r", "ctrl+d", "enter", "d", "y":
 	default:
 		return m, nil, false
 	}
@@ -95,6 +97,12 @@ func (m tuiModel) handleRunsKey(key string) (tea.Model, tea.Cmd, bool) {
 		return md, cmd, true
 	case "l":
 		md, cmd := m.logs(r.run.Box)
+		return md, cmd, true
+	case "p":
+		md, cmd := m.pauseBox(m.box(r.run.Box))
+		return md, cmd, true
+	case "r":
+		md, cmd := m.resumeBox(m.box(r.run.Box))
 		return md, cmd, true
 	case "ctrl+d":
 		if r.run.Ended != nil {

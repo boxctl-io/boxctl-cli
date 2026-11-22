@@ -443,15 +443,9 @@ func (m tuiModel) handleBoxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "l":
 		return m.logs(vm.Name)
 	case "p":
-		return m.act(vm, "pause", "running", func(ctx context.Context) (string, error) {
-			_, err := m.c.Pause(ctx, vm.Name)
-			return "", err
-		})
+		return m.pauseBox(vm)
 	case "r":
-		return m.act(vm, "resume", "paused", func(ctx context.Context) (string, error) {
-			_, err := m.c.Resume(ctx, vm.Name)
-			return "", err
-		})
+		return m.resumeBox(vm)
 	case "K":
 		return m.act(vm, "keep", "", func(ctx context.Context) (string, error) {
 			kept, err := m.c.Keep(ctx, vm.Name)
@@ -467,6 +461,22 @@ func (m tuiModel) handleBoxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.askExpose(vm)
 	}
 	return m, nil
+}
+
+// pauseBox pauses vm (p in :boxes, a describe page and :runs).
+func (m tuiModel) pauseBox(vm *client.VM) (tea.Model, tea.Cmd) {
+	return m.act(vm, "pause", "running", func(ctx context.Context) (string, error) {
+		_, err := m.c.Pause(ctx, vm.Name)
+		return "", err
+	})
+}
+
+// resumeBox resumes vm (r in :boxes, a describe page and :runs).
+func (m tuiModel) resumeBox(vm *client.VM) (tea.Model, tea.Cmd) {
+	return m.act(vm, "resume", "paused", func(ctx context.Context) (string, error) {
+		_, err := m.c.Resume(ctx, vm.Name)
+		return "", err
+	})
 }
 
 // --- text pages -----------------------------------------------------------
