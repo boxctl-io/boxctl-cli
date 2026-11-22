@@ -220,7 +220,7 @@ func (m tuiModel) infoBlock() []string {
 		status = m.spin.View() + " " + refreshed
 	}
 	showing := kv("Showing", m.stateFilter.String())
-	if t := m.top(); t.kind == pageTable && (t.view == backlogView || t.view == runsView) {
+	if m.app.backlog {
 		showing = kv("Backlog", m.backlogSummary())
 	}
 	return []string{
@@ -243,11 +243,11 @@ func (m tuiModel) hotkeyBlock(width int) []string {
 	keys := append([]hotkey{}, v.hotkeys...)
 	switch t.kind {
 	case pageHome:
-		keys = append(append([]hotkey{}, homeHotkeys...), screenHotkeys()...)
+		keys = append(append([]hotkey{}, homeHotkeys...), m.app.screenHotkeys()...)
 	case pageText:
 		keys = []hotkey{{"j/k", "scroll"}, {"g/G", "top/bottom"}, {"y", "json"}, {"s", "shell"}, {"a", "claude"}, {"l", "logs"}}
 	default:
-		keys = append(keys, screenHotkeys()...)
+		keys = append(keys, m.app.screenHotkeys()...)
 	}
 	keys = append(keys, commonHotkeys...)
 	// Column width from the widest entry.

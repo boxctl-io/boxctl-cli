@@ -228,7 +228,7 @@ func TestTUIBacklog(t *testing.T) {
 	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	tuiFlashFor = time.Millisecond
 	c, _ := fakeBoxServer(t, tuiFixture())
-	m := boxesTUI(c)
+	m := boardTUI(c)
 	feed := func(cmd tea.Cmd) {
 		for _, msg := range runCmd(cmd) {
 			if msg == nil {
@@ -332,7 +332,7 @@ func TestTUIBacklogPassAgain(t *testing.T) {
 func TestTUIBacklogDescribeWraps(t *testing.T) {
 	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	c, _ := fakeBoxServer(t, tuiFixture())
-	m := boxesTUI(c)
+	m := boardTUI(c)
 	m.width, m.height = 60, 20
 	goal := strings.Repeat("make the thing better ", 30) + "THE-END"
 	if _, err := addBacklogItem("o/r", goal, "", 0); err != nil {
@@ -385,7 +385,7 @@ func TestWrapLines(t *testing.T) {
 func TestTUIBacklogRepoChoices(t *testing.T) {
 	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	c, _ := fakeBoxServer(t, tuiFixture())
-	m := boxesTUI(c)
+	m := boardTUI(c)
 	m.repos = []ghRepo{{FullName: "acme/boxctl-cli"}, {FullName: "acme/web"}, {FullName: "o/r"}}
 	m.loaded["repos"] = true
 	m.reposAt = time.Now()
@@ -474,7 +474,7 @@ func TestTUIBacklogLimit(t *testing.T) {
 	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
 	tuiFlashFor = time.Millisecond
 	c, _ := fakeBoxServer(t, tuiFixture())
-	m := boxesTUI(c)
+	m := boardTUI(c)
 	m.backlog = &backlog.Backlog{Limits: backlog.DefaultLimits}
 	m.pages = []page{{kind: pageTable, view: backlogView, sortCol: -1}}
 	m, _ = press(t, m, "L")
@@ -512,7 +512,7 @@ func TestBacklogCommandNames(t *testing.T) {
 	if c, _, _ := rootCmd.Find([]string{"runs"}); c != runsCmd {
 		t.Errorf("runs = %s", c.CommandPath())
 	}
-	if findView("queue") != nil || findView("q") != nil {
+	if boardApp.findView("queue") != nil || boardApp.findView("q") != nil {
 		t.Error(":queue still opens a view")
 	}
 }

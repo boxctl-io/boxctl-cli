@@ -31,15 +31,16 @@ boxctl rm my-box                            # done
 |---|---|
 | `login` / `logout` | Save or forget your personal token |
 | `create`, `ls`, `rm`, `pause`, `resume`, `keep` | Box lifecycle (`rm`/`pause`/`resume` also take `all`) |
-| `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`, `:repos` (your GitHub repos, newest push first; enter starts `claude --repo` on one, `g` a `--goal` run, `a` adds one to the backlog), `:backlog`, `:runs`; `/` to filter |
+| `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`; `/` to filter |
 | `images`, `sizes` | What you can boot, and at what size |
 | `ssh`, `ssh-proxy` | Shell or one-off command; real `ssh`/`scp`/`rsync` through a proxy |
 | `cp` | Copy a file or directory (`-r`) between a box and this machine, any size |
 | `port-forward`, `expose`, `unexpose` | Reach a box port locally, or publish it on the internet |
 | `backups`, `restore` | Saved copies of paused boxes |
 | `claude` | Run a coding agent on a box with your project |
-| `backlog` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:backlog` in the tui) |
-| `runs` | Every run of every backlog item, going and ended (`:runs` in the tui) |
+| `backlog` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:backlog` in the board) |
+| `runs` | Every run of every backlog item, going and ended (`:runs` in the board) |
+| `board` | The agent work in the same kind of view: `:backlog`, `:runs`, `:repos` (your GitHub repos, newest push first; enter starts `claude --repo` on one, `g` a `--goal` run, `a` adds one to the backlog). Runs the backlog while it's open |
 
 Run `boxctl <command> --help` for flags.
 
@@ -109,7 +110,8 @@ boxctl ls                         # running boxes
 boxctl ls -a                      # all of them, paused and stopped too
 boxctl ls -p                      # this directory's project's boxes: its own, its runs and goals
 boxctl ls -o json                 # for scripts; images and sizes take -o json too
-boxctl tui                        # (or just `boxctl` on a terminal) k9s-style: :boxes/:urls/:images/:sizes/:backups/:repos, / filter, s shell, d describe, ctrl-d delete, ? keys
+boxctl tui                        # (or just `boxctl` on a terminal) k9s-style: :boxes/:urls/:images/:sizes/:backups, / filter, s shell, d describe, ctrl-d delete, ? keys
+boxctl board                      # the same for the agent work: :backlog/:runs/:repos, and it runs the backlog
 # on a terminal, ls then fills in each PR's state (open, merged, closed) via `gh pr view` without holding up the list
 boxctl images
 boxctl create my-box
@@ -501,14 +503,14 @@ A goal's boxes are deleted when its next run starts, and when it's merged
 or cancelled. A refused box (your account's limit, a full fleet) costs
 nothing; new runs wait 2 minutes.
 
-In the tui, `:backlog` is the goals and `:runs` the runs, going and
+In `boxctl board`, `:backlog` is the goals and `:runs` the runs, going and
 ended; enter on a goal shows its runs. In `:runs`, `s` and `l` open a
 run's shell and log while its box is there, and ctrl-d kills a run
 that's going: its box is deleted and the goal waits for you (it counts
 as one of that kind's attempts), with nothing more started for it until
 `r` retries it.
 
-Nothing moves unless something runs the passes, every 30s: `boxctl tui`
+Nothing moves unless something runs the passes, every 30s: `boxctl board`
 does while it's open, whatever view you're in, and `boxctl backlog
 dispatch` does with no screen. Only one runs them at a time. Runs
 already on boxes carry on while neither is open. The backlog lives in

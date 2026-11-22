@@ -22,7 +22,7 @@ import (
 
 // The backlog's loop: what a pass observes and what it does about it. The
 // decisions are internal/backlog's (Decide); this is the I/O around them,
-// shared by the tui (a pass every backlogPassEvery while it's open) and
+// shared by boxctl board (a pass every backlogPassEvery while it's open) and
 // `boxctl backlog dispatch` (the same, with no screen). A run is `boxctl claude
 // --repo R --box <name> --goal "..."` (plus --pr N for a follow-up) run as
 // a child process, its output kept in ~/.boxctl/backlog/logs/<box>.log.
@@ -57,14 +57,14 @@ func newBacklogRunner(c *client.Client) (*backlogRunner, error) {
 	return &backlogRunner{path: path, c: c, exe: exe, owner: fmt.Sprintf("%s:%d", host, os.Getpid()), launching: map[string]bool{}}, nil
 }
 
-// errLoopHeld: another tui or `backlog dispatch` is running the passes.
+// errLoopHeld: another boxctl board or `backlog dispatch` is running the passes.
 type errLoopHeld struct{ holder string }
 
 func (e errLoopHeld) Error() string {
 	return "another boxctl (" + e.holder + ") is running the backlog"
 }
 
-// backlogEvent is something a pass did or failed to do, for the tui's
+// backlogEvent is something a pass did or failed to do, for the board's
 // flash or `backlog dispatch`'s output.
 type backlogEvent struct {
 	text string

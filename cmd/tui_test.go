@@ -555,7 +555,7 @@ func TestTUIRepos(t *testing.T) {
 	}
 
 	c, _ := fakeBoxServer(t, nil)
-	m := boxesTUI(c)
+	m := boardTUI(c)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	m = next.(tuiModel)
 	// :repos with no cache asks GitHub.
@@ -659,7 +659,7 @@ func TestTUIRepos(t *testing.T) {
 
 	// The list was cached: a fresh model shows it at once and doesn't
 	// ask GitHub again...
-	m2 := boxesTUI(c)
+	m2 := boardTUI(c)
 	next, _ = m2.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	m2 = next.(tuiModel)
 	cmd = m2.openView(reposView)
@@ -676,7 +676,7 @@ func TestTUIRepos(t *testing.T) {
 	// cache shown meanwhile.
 	stale, _ := json.Marshal(repoCache{FetchedAt: now.Add(-2 * time.Hour), Repos: []ghRepo{{FullName: "cdalar/stale"}}})
 	_ = os.WriteFile(cache, stale, 0o600)
-	m3 := boxesTUI(c)
+	m3 := boardTUI(c)
 	cmd = m3.openView(reposView)
 	if keys(m3.rows()) != "cdalar/stale" || !m3.loading["repos"] {
 		t.Errorf("stale cache: rows=%q loading=%v", keys(m3.rows()), m3.loading)
@@ -763,25 +763,26 @@ func TestTUICommandComplete(t *testing.T) {
 	m := boxesTUI(nil)
 	m = typeIn(t, m, ":ba")
 	m, _ = press(t, m, "tab")
-	if got := m.command.Value(); got != "backlog" {
-		t.Fatalf(":ba<tab> = %q, want backlog (the first match, ahead of backups)", got)
-	}
-	m, _ = press(t, m, "esc")
-	m = typeIn(t, m, ":ba")
-	m, _ = press(t, m, "down")
-	m, _ = press(t, m, "tab")
 	if got := m.command.Value(); got != "backups" {
-		t.Fatalf(":ba<down><tab> = %q, want backups", got)
+		t.Fatalf("tui :ba<tab> = %q, want backups", got)
 	}
 	m, _ = press(t, m, "esc")
-	m = typeIn(t, m, ":re")
-	m, _ = press(t, m, "tab")
-	if got := m.command.Value(); got != "repos" {
-		t.Fatalf(":re<tab> = %q, want repos", got)
+
+	b := boardTUI(nil)
+	b = typeIn(t, b, ":ba")
+	b, _ = press(t, b, "tab")
+	if got := b.command.Value(); got != "backlog" {
+		t.Fatalf("board :ba<tab> = %q, want backlog", got)
 	}
-	m, _ = press(t, m, "enter")
-	if m.top().view != reposView {
-		t.Fatalf("view = %v, want repos", m.top().view.name)
+	b, _ = press(t, b, "esc")
+	b = typeIn(t, b, ":re")
+	b, _ = press(t, b, "tab")
+	if got := b.command.Value(); got != "repos" {
+		t.Fatalf("board :re<tab> = %q, want repos", got)
+	}
+	b, _ = press(t, b, "enter")
+	if b.top().view != reposView {
+		t.Fatalf("view = %v, want repos", b.top().view.name)
 	}
 }
 
@@ -829,28 +830,64 @@ func TestTUIClaudeSessionKey(t *testing.T) {
 }
 
 func TestTUIScreenKeys(t *testing.T) {
-	// No screen key may shadow a key a view already has.
-	for _, v := range tuiViews {
-		for _, h := range v.hotkeys {
-			if screenFor(h.key) != nil {
-				t.Errorf("screen key %q shadows %s's %q", h.key, v.name, h.label)
+	// No screen key may shadow a key one of its app's views already has.
+	for _, app := range []*tuiApp{boxesApp, boardApp} {
+		for _, v := range app.views {
+			for _, h := range v.hotkeys {
+				if app.screenFor(h.key) != nil {
+					t.Errorf("%s: screen key %q shadows %s's %q", app.name, h.key, v.name, h.label)
+				}
+			}
+		}
+		for _, s := range app.screens {
+			if app.findView(s.view.name) == nil {
+				t.Errorf("%s: screen key %q opens %s, not one of its views", app.name, s.key, s.view.name)
 			}
 		}
 	}
-	m := boxesTUI(nil)
-	for _, step := range []struct {
-		key  string
-		want *tableView
-	}{{"t", backlogView}, {"u", runsView}, {"h", reposView}, {"b", boxesView}, {"u", runsView}} {
-		m, _ = press(t, m, step.key)
-		if m.top().view != step.want || len(m.pages) != 2 {
-			t.Fatalf("%s: view = %s (%d pages), want %s", step.key, m.top().view.name, len(m.pages), step.want.name)
+	for _, tc := range []struct {
+		m     tuiModel
+		steps []string
+		want  []*tableView
+	}{
+		{boxesTUI(nil), []string{"u", "b", "u"}, []*tableView{urlsView, boxesView, urlsView}},
+		{boardTUI(nil), []string{"u", "h", "t", "u"}, []*tableView{runsView, reposView, backlogView, runsView}},
+	} {
+		m := tc.m
+		for i, key := range tc.steps {
+			m, _ = press(t, m, key)
+			if m.top().view != tc.want[i] || len(m.pages) != 2 {
+				t.Fatalf("%s %s: view = %s (%d pages), want %s", m.app.name, key, m.top().view.name, len(m.pages), tc.want[i].name)
+			}
 		}
 	}
-	// From a pushed page too: the switch replaces the stack.
-	m.openRuns(1)
+	// The board's keys don't switch in boxctl tui (t, h are free there).
+	m := boxesTUI(nil)
 	m, _ = press(t, m, "t")
-	if m.top().view != backlogView || len(m.pages) != 2 {
-		t.Fatalf("t from a scoped :runs: view = %s (%d pages)", m.top().view.name, len(m.pages))
+	if m.top().view != boxesView {
+		t.Errorf("t in boxctl tui opened %s", m.top().view.name)
+	}
+	// From a pushed page too: the switch replaces the stack.
+	b := boardTUI(nil)
+	b.openRuns(1)
+	b, _ = press(t, b, "t")
+	if b.top().view != backlogView || len(b.pages) != 2 {
+		t.Fatalf("t from a scoped :runs: view = %s (%d pages)", b.top().view.name, len(b.pages))
+	}
+}
+
+// TestTUIOtherAppView: a view of the other app is named, not opened.
+func TestTUIOtherAppView(t *testing.T) {
+	m := boxesTUI(nil)
+	next, _ := m.runCommand("backlog")
+	m = next.(tuiModel)
+	if m.top().view != boxesView || !strings.Contains(m.flash, "boxctl board") {
+		t.Errorf(":backlog in boxctl tui: view %s, flash %q", m.top().view.name, m.flash)
+	}
+	b := boardTUI(nil)
+	next, _ = b.runCommand("urls")
+	b = next.(tuiModel)
+	if b.top().view != backlogView || !strings.Contains(b.flash, "boxctl tui") {
+		t.Errorf(":urls on the board: view %s, flash %q", b.top().view.name, b.flash)
 	}
 }

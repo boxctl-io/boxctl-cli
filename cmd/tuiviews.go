@@ -65,69 +65,6 @@ var commonHotkeys = []hotkey{
 	{":", "command"}, {"/", "filter"}, {"?", "help"}, {"esc", "back"}, {"ctrl-c", "quit"},
 }
 
-// screenKeys switch to the agent flow's main views with one keystroke
-// from any table view: the repositories to start from, the backlog of
-// goals, the runs working on them, and the boxes they run on. Each key is
-// free in every table view (none is a view's hotkey or a sort letter, as
-// those are uppercase); in a text page b still pages up, so there esc
-// comes first.
-var screenKeys = []struct {
-	key  string
-	view *tableView
-}{
-	{"b", boxesView}, {"t", backlogView}, {"u", runsView}, {"h", reposView},
-}
-
-// screenFor is the view key switches to, nil for none.
-func screenFor(key string) *tableView {
-	for _, s := range screenKeys {
-		if s.key == key {
-			return s.view
-		}
-	}
-	return nil
-}
-
-// screenHotkeys are screenKeys for the header and the help page.
-func screenHotkeys() []hotkey {
-	var keys []hotkey
-	for _, s := range screenKeys {
-		keys = append(keys, hotkey{s.key, ":" + s.view.name})
-	}
-	return keys
-}
-
-// The order is also tab completion's at the : prompt, which takes the first
-// match: backlog comes before backups so `:back<tab>` is the backlog, the
-// view opened far more often (down/ctrl-n still steps on to backups).
-var tuiViews = []*tableView{boxesView, urlsView, imagesView, sizesView, backlogView, runsView, backupsView, reposView}
-
-// commandNames are what the : prompt suggests, in the order it offers
-// them: the views, then the other commands.
-func commandNames() []string {
-	var names []string
-	for _, v := range tuiViews {
-		names = append(names, v.name)
-	}
-	return append(names, "home", "create", "help", "ssh", "quit")
-}
-
-// findView is the view `:name` means, nil for none.
-func findView(name string) *tableView {
-	name = strings.ToLower(strings.TrimSpace(name))
-	for _, v := range tuiViews {
-		if v.name == name {
-			return v
-		}
-		for _, a := range v.aliases {
-			if a == name {
-				return v
-			}
-		}
-	}
-	return nil
-}
-
 var boxesView = &tableView{
 	name:     "boxes",
 	aliases:  []string{"box", "vms", "vm", "b"},

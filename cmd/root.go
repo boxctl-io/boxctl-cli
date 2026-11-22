@@ -80,6 +80,9 @@ list, connect to, and destroy your Firecracker microVMs ("boxes").`,
 	Example: `  # Browse your boxes in the terminal UI (the same as boxctl tui)
   boxctl
 
+  # The backlog of goals, their runs and your repos (and run the backlog)
+  boxctl board
+
   # Save your personal access token (create one at ` + dashboardURL + `)
   boxctl login
 

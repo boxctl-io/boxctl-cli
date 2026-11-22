@@ -13,7 +13,7 @@ import (
 // `:runs`: the backlog's runs, going and ended (runs.go's rows), with a
 // run's box keys -- shell, logs, pause/resume, kill. Resume is what makes
 // a goal box the idle reaper paused (boxctl.pause-when-done) reachable
-// again without going to :boxes. Enter on an item in :backlog opens
+// from the board, which has no :boxes. Enter on an item in :backlog opens
 // it scoped to that item's runs (page.item).
 
 var runsView = &tableView{

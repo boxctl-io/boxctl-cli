@@ -121,10 +121,19 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   repository; unlabeled, named `<agent>-<dir>[-<task>]`), `-l` filters
   by label on the server, and `-o wide` adds IP, PROVIDER, READY and
   BRANCH. `printBoxes` is the listing itself, shared with `claude ls`.
-- `cmd/tui.go`, `tuiviews.go`, `tuiactions.go`, `tuirender.go`,
-  `tuicreate.go`, `tuirepos.go`, `tuihome.go` — `tui`: the boxes the way k9s shows a cluster (Bubble
+- `cmd/tui.go`, `tuiapp.go`, `tuiviews.go`, `tuiactions.go`, `tuirender.go`,
+  `tuicreate.go`, `tuirepos.go`, `tuihome.go` — `tui` and `board`: two
+  apps the way k9s shows a cluster (Bubble
   Tea, with Lip Gloss and Bubbles' textinput, textarea and spinner --
-  the one place those are used). A goal prompt (`g`, `a`) is
+  the one place those are used). `tuiapp.go`'s `tuiApp` is all that
+  differs between them: `boxesApp` (`boxctl tui`, bare `boxctl`: `:boxes`,
+  `:urls`, `:images`, `:sizes`, `:backups`, `c`/`:create`) and `boardApp`
+  (`boxctl board`: `:backlog`, `:runs`, `:repos`, and the only one that
+  loads the backlog and runs its passes) -- each its views (the `:`
+  prompt's, `findView`), home tiles, one-key `screens` and start-up
+  `listings`. Both list the boxes, so `:runs`' box keys work on the
+  board; a view of the other app at the `:` prompt is named
+  (`otherApp`), not opened. A new view goes into one app's lists. A goal prompt (`g`, `a`) is
   `promptText`, a textarea sized to the dialog so a long goal wraps
   onto the next line; enter submits it. Other prompts are one-line
   `prompt`s. `tuiviews.go` defines the resource views, each
@@ -147,10 +156,11 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `list`, is where that lives). `tuihome.go` is the page the tui starts
   on (`pageHome`, always the bottom of the stack: `openView` puts a view
   on top of it, so esc from a view goes home, as does `:home`): a tile
-  per view (`homeTiles`: blurb, one-key switch, a live count from
-  listings already loaded -- `Init` also lists `homeListings` for it,
+  per view (the app's `tiles`: blurb, one-key switch, a live count from
+  listings already loaded -- `Init` also lists the app's `listings` for it,
   never `:repos`, which asks GitHub), arrows/j/k/tab between tiles,
-  enter to open. Tests that start on `:boxes` use `boxesTUI`. `tui.go` is the
+  enter to open. Tests that start on `:boxes` use `boxesTUI`, on
+  `:backlog` `boardTUI`. `tui.go` is the
   model: a navigation stack of pages (a table, or a text page -- describe,
   json, logs, help), the listings (boxes every 5s plus the top view's
   resource), flashes. `tuiactions.go` is the keys: the `:` prompt
@@ -161,9 +171,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   default, with an optional size after it, and runs `Client.Restore` --
   which polls with a spinner on stderr, so `tui`'s `RunE` first calls
   `client.QuietProgress`, the one thing in `internal/client` that exists
-  for the tui), `0/1/2` for all/running/paused (k9s's namespace keys), `b`/`t`/`u`/`h`
-  jumping straight to `:boxes`/`:backlog`/`:runs`/`:repos` from any table
-  (`screenKeys` in `tuiviews.go`, which must stay free in every view), and
+  for the tui), `0/1/2` for all/running/paused (k9s's namespace keys), the
+  app's `screens` jumping straight to a view from any table (`b`/`u` for
+  `:boxes`/`:urls` in the tui, `t`/`u`/`h` for `:backlog`/`:runs`/`:repos`
+  on the board; each must stay free in every view of its app), and
   the box actions (`s` shell, `p`/`r`/`K`, `l` logs: `logsScript` over
   `Client.Exec` through `logFormatter`, so it needs no ssh key). Every
   action is the matching `Client` call the subcommand makes, and the
@@ -458,7 +469,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   list --head` finds the existing PR, so a goal still ends `done`.
 - `internal/backlog/`, `cmd/backlog.go`, `cmd/backlogdispatch.go`,
   `cmd/tuibacklog.go`, `cmd/runs.go`, `cmd/tuiruns.go` — `boxctl backlog`
-  and the tui's `:backlog` (the goals), `boxctl runs` and `:runs` (every
+  and `boxctl board`'s `:backlog` (the goals), `boxctl runs` and `:runs` (every
   run of every goal, going and ended): the boxctl-orchestrator design
   (boxctl-orchestrator's `docs/designs/boxctl_orchestrator.md`) built into
   the CLI on top of goal runs, instead of its own runner, SQLite and
@@ -475,10 +486,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   process, output in `~/.boxctl/backlog/logs/`, and `launching` is what
   keeps a pass from calling a run still being set up lost. A refusal
   (`isRefusal` matches `internal/client`'s `refusalMessage` text) drops
-  the run uncharged and backs off. The passes run in the tui every
-  `backlogPassEvery` (any view) or in `boxctl backlog dispatch`;
+  the run uncharged and backs off. The passes run in `boxctl board` every
+  `backlogPassEvery` (any view; never in `boxctl tui`) or in `boxctl backlog dispatch`;
   `Backlog.Claim` keeps it to one loop. A merge here (`backlog merge`,
-  the tui's `m`) marks the item done itself (`markBacklogMerged`) instead
+  the board's `m`) marks the item done itself (`markBacklogMerged`) instead
   of waiting for a pass to see the PR merged, and a tui key's pass asked
   for while one is running follows it at once (`backlogPassAgain`), not
   30s later. Follow-up prompts are `backlog.GoalFor`. A kill (ctrl-d in
