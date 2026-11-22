@@ -33,7 +33,12 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your boxes in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your boxes, laid out like k9s.
 
-  :boxes :urls :images :sizes :backups :repos :backlog :runs   switch view (also :q, :help, :create)
+It starts on home: a tile per view with what it shows and a live count;
+arrows (or j/k, tab) move between tiles, enter opens one, and esc from a
+view comes back to it (:home from anywhere).
+
+  :boxes :urls :images :sizes :backups :repos :backlog :runs   switch view (also :home, :q, :help, :create)
+  b / t / u / h   :boxes / :backlog / :runs / :repos with one key
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the box; y its JSON; l a --goal run's log
@@ -160,6 +165,7 @@ type pageKind int
 const (
 	pageTable pageKind = iota
 	pageText
+	pageHome // the tiles (tuihome.go); only ever the bottom page
 )
 
 // page is one level of the navigation stack: a table view with its own
@@ -248,7 +254,7 @@ func newTUI(c *client.Client) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "boxes, urls, images, sizes, backups, repos, backlog, runs, create, help, q"
+	cmd.Placeholder = "home, boxes, urls, images, sizes, backups, repos, backlog, runs, create, help, q"
 	cmd.CharLimit = 80
 	// Typing shows the first command the text starts, greyed out after it;
 	// tab takes it, up/down (ctrl-n/ctrl-p) step through the others.
@@ -260,7 +266,7 @@ func newTUI(c *client.Client) tuiModel {
 		c:           c,
 		loaded:      map[string]bool{},
 		loading:     map[string]bool{},
-		pages:       []page{{kind: pageTable, view: boxesView, sortCol: -1}},
+		pages:       []page{homePage()},
 		stateFilter: showAllBoxes,
 		filter:      f,
 		command:     cmd,
@@ -270,7 +276,11 @@ func newTUI(c *client.Client) tuiModel {
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	return tea.Batch(m.list("boxes"), m.tick(), m.spin.Tick, loadBacklogMsg)
+	cmds := []tea.Cmd{m.list("boxes"), m.tick(), m.spin.Tick, loadBacklogMsg}
+	for _, r := range homeListings {
+		cmds = append(cmds, m.list(r))
+	}
+	return tea.Batch(cmds...)
 }
 
 // top is the page shown.
@@ -627,10 +637,10 @@ func (m *tuiModel) moveTo(last bool) {
 	t.selected = rows[t.cursor].key
 }
 
-// openView makes v the only page (k9s's `:resource`), listing what it
-// needs.
+// openView makes v the only page over home (k9s's `:resource`), listing
+// what it needs.
 func (m *tuiModel) openView(v *tableView) tea.Cmd {
-	m.pages = []page{{kind: pageTable, view: v, sortCol: -1}}
+	m.pages = []page{homePage(), {kind: pageTable, view: v, sortCol: -1}}
 	m.filter.SetValue("")
 	return tea.Batch(m.list(v.resource), m.spinIfBusy())
 }

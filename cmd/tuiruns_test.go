@@ -47,7 +47,7 @@ func runsFixture(t *testing.T) []client.VM {
 // runsTUI is a tui on :backlog over runsFixture, its listings loaded.
 func runsTUI(t *testing.T, c *client.Client, vms []client.VM) tuiModel {
 	t.Helper()
-	m := newTUI(c)
+	m := boxesTUI(c)
 	m.vms = vms
 	m.loaded["boxes"] = true
 	q, err := loadBacklog()

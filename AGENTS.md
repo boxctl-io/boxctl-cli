@@ -122,7 +122,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   by label on the server, and `-o wide` adds IP, PROVIDER, READY and
   BRANCH. `printBoxes` is the listing itself, shared with `claude ls`.
 - `cmd/tui.go`, `tuiviews.go`, `tuiactions.go`, `tuirender.go`,
-  `tuicreate.go`, `tuirepos.go` — `tui`: the boxes the way k9s shows a cluster (Bubble
+  `tuicreate.go`, `tuirepos.go`, `tuihome.go` — `tui`: the boxes the way k9s shows a cluster (Bubble
   Tea, with Lip Gloss and Bubbles' textinput, textarea and spinner --
   the one place those are used). A goal prompt (`g`, `a`) is
   `promptText`, a textarea sized to the dialog so a long goal wraps
@@ -144,7 +144,13 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   view shows the cache at once and asks GitHub in the background only
   when it's over an hour old (`repoCacheMaxAge`), R always asks, and
   the view is `onDemand` so the 5s tick never does (`listRepos`, not
-  `list`, is where that lives). `tui.go` is the
+  `list`, is where that lives). `tuihome.go` is the page the tui starts
+  on (`pageHome`, always the bottom of the stack: `openView` puts a view
+  on top of it, so esc from a view goes home, as does `:home`): a tile
+  per view (`homeTiles`: blurb, one-key switch, a live count from
+  listings already loaded -- `Init` also lists `homeListings` for it,
+  never `:repos`, which asks GitHub), arrows/j/k/tab between tiles,
+  enter to open. Tests that start on `:boxes` use `boxesTUI`. `tui.go` is the
   model: a navigation stack of pages (a table, or a text page -- describe,
   json, logs, help), the listings (boxes every 5s plus the top view's
   resource), flashes. `tuiactions.go` is the keys: the `:` prompt

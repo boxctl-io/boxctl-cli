@@ -40,7 +40,7 @@ func keys(rows []tableRow) string {
 }
 
 func TestTUIRowsSortAndFilter(t *testing.T) {
-	m := newTUI(nil)
+	m := boxesTUI(nil)
 	m.vms = tuiFixture()
 	sortBoxes(m.vms)
 	if got, want := keys(m.rows()), "booting goal-box web old-paused"; got != want {
@@ -155,6 +155,10 @@ func press(t *testing.T, m tuiModel, key string) (tuiModel, tea.Cmd) {
 		msg = tea.KeyMsg{Type: tea.KeyDown}
 	case "up":
 		msg = tea.KeyMsg{Type: tea.KeyUp}
+	case "left":
+		msg = tea.KeyMsg{Type: tea.KeyLeft}
+	case "right":
+		msg = tea.KeyMsg{Type: tea.KeyRight}
 	case "home":
 		msg = tea.KeyMsg{Type: tea.KeyHome}
 	default:
@@ -186,7 +190,7 @@ func hasAction(cmd tea.Cmd) *tuiActionMsg {
 func TestTUIListAndKeys(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	c, calls := fakeBoxServer(t, tuiFixture())
-	m := newTUI(c)
+	m := boxesTUI(c)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	m = next.(tuiModel)
 
@@ -307,11 +311,11 @@ func TestTUIListAndKeys(t *testing.T) {
 	m, _ = press(t, m, "j")
 	m, _ = press(t, m, "j") // web
 	m, _ = press(t, m, "enter")
-	if len(m.pages) != 2 || m.top().kind != pageText || !strings.Contains(m.View(), "https://web-abc.boxctl.app") || !strings.Contains(m.View(), "<web>") {
+	if len(m.pages) != 3 || m.top().kind != pageText || !strings.Contains(m.View(), "https://web-abc.boxctl.app") || !strings.Contains(m.View(), "<web>") {
 		t.Errorf("enter didn't describe web:\n%s", m.View())
 	}
 	m, _ = press(t, m, "y")
-	if len(m.pages) != 3 || !strings.Contains(m.View(), `"name": "web"`) || !strings.Contains(m.View(), "<web.json>") {
+	if len(m.pages) != 4 || !strings.Contains(m.View(), `"name": "web"`) || !strings.Contains(m.View(), "<web.json>") {
 		t.Errorf("y didn't show web's json:\n%s", m.View())
 	}
 	// The page's box takes the box keys too.
@@ -324,7 +328,7 @@ func TestTUIListAndKeys(t *testing.T) {
 	*calls = nil
 	m, _ = press(t, m, "esc")
 	m, _ = press(t, m, "esc")
-	if len(m.pages) != 1 || m.top().view != boxesView {
+	if len(m.pages) != 2 || m.top().view != boxesView {
 		t.Errorf("esc esc didn't come back: %d pages", len(m.pages))
 	}
 
@@ -361,7 +365,11 @@ func TestTUIListAndKeys(t *testing.T) {
 		t.Errorf("server saw %v", *calls)
 	}
 
-	// A bare q on the top view doesn't quit; :q does.
+	// q on a view goes home; a bare q there doesn't quit; :q does.
+	m, _ = press(t, m, "q")
+	if m.top().kind != pageHome {
+		t.Errorf("q on :urls went to %v, want home", m.top().kind)
+	}
 	m, cmd = press(t, m, "q")
 	if cmd != nil {
 		if _, ok := cmd().(tea.QuitMsg); ok {
@@ -393,7 +401,7 @@ func TestTUIListAndKeys(t *testing.T) {
 func TestTUIRestore(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	c, calls := fakeBoxServer(t, tuiFixture())
-	m := newTUI(c)
+	m := boxesTUI(c)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m = next.(tuiModel)
 	next, _ = m.Update(m.list("boxes")())
@@ -435,7 +443,7 @@ func TestTUIRestore(t *testing.T) {
 }
 
 func TestTUISSHError(t *testing.T) {
-	m := newTUI(nil)
+	m := boxesTUI(nil)
 	next, _ := m.Update(tuiSSHDoneMsg{name: "web", err: errors.New("exit status 1"),
 		stderr: "Error: opening a terminal on web: vm not running (HTTP 409)\n  run boxctl resume web\n"})
 	m = next.(tuiModel)
@@ -457,7 +465,7 @@ func TestTUIDescribe(t *testing.T) {
 func TestTUICreateForm(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	c, calls := fakeBoxServer(t, nil)
-	m := newTUI(c)
+	m := boxesTUI(c)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
 	m = next.(tuiModel)
 	m, _ = press(t, m, "c")
@@ -549,7 +557,7 @@ func TestTUIRepos(t *testing.T) {
 	}
 
 	c, _ := fakeBoxServer(t, nil)
-	m := newTUI(c)
+	m := boxesTUI(c)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	m = next.(tuiModel)
 	// :repos with no cache asks GitHub.
@@ -653,7 +661,7 @@ func TestTUIRepos(t *testing.T) {
 
 	// The list was cached: a fresh model shows it at once and doesn't
 	// ask GitHub again...
-	m2 := newTUI(c)
+	m2 := boxesTUI(c)
 	next, _ = m2.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	m2 = next.(tuiModel)
 	cmd = m2.openView(reposView)
@@ -670,7 +678,7 @@ func TestTUIRepos(t *testing.T) {
 	// cache shown meanwhile.
 	stale, _ := json.Marshal(repoCache{FetchedAt: now.Add(-2 * time.Hour), Repos: []ghRepo{{FullName: "cdalar/stale"}}})
 	_ = os.WriteFile(cache, stale, 0o600)
-	m3 := newTUI(c)
+	m3 := boxesTUI(c)
 	cmd = m3.openView(reposView)
 	if keys(m3.rows()) != "cdalar/stale" || !m3.loading["repos"] {
 		t.Errorf("stale cache: rows=%q loading=%v", keys(m3.rows()), m3.loading)
@@ -685,7 +693,7 @@ func TestTUIRepos(t *testing.T) {
 }
 
 func TestTUIClaudeDone(t *testing.T) {
-	m := newTUI(nil)
+	m := boxesTUI(nil)
 	next, _ := m.Update(tuiClaudeDoneMsg{repo: "cdalar/boxctl", err: errors.New("exit status 1"),
 		stderr: "Cloning cdalar/boxctl on boxctl-rapid-stone-ab12...\nError: cloning cdalar/boxctl on boxctl-rapid-stone-ab12: exit status 128\n  fatal: repository not found\n"})
 	m = next.(tuiModel)
@@ -754,7 +762,7 @@ func TestBareRootHelpOffTerminal(t *testing.T) {
 // TestTUICommandComplete: tab in the : prompt takes the suggested command,
 // down steps to the next one that matches.
 func TestTUICommandComplete(t *testing.T) {
-	m := newTUI(nil)
+	m := boxesTUI(nil)
 	m = typeIn(t, m, ":ba")
 	m, _ = press(t, m, "tab")
 	if got := m.command.Value(); got != "backlog" {
@@ -807,7 +815,7 @@ func TestClaudeSessionArgs(t *testing.T) {
 }
 
 func TestTUIClaudeSessionKey(t *testing.T) {
-	m := newTUI(nil)
+	m := boxesTUI(nil)
 	m.vms = tuiFixture()
 	sortBoxes(m.vms)
 	m.selectRow("web") // not a boxctl claude box
@@ -831,20 +839,20 @@ func TestTUIScreenKeys(t *testing.T) {
 			}
 		}
 	}
-	m := newTUI(nil)
+	m := boxesTUI(nil)
 	for _, step := range []struct {
 		key  string
 		want *tableView
 	}{{"t", backlogView}, {"u", runsView}, {"h", reposView}, {"b", boxesView}, {"u", runsView}} {
 		m, _ = press(t, m, step.key)
-		if m.top().view != step.want || len(m.pages) != 1 {
+		if m.top().view != step.want || len(m.pages) != 2 {
 			t.Fatalf("%s: view = %s (%d pages), want %s", step.key, m.top().view.name, len(m.pages), step.want.name)
 		}
 	}
 	// From a pushed page too: the switch replaces the stack.
 	m.openRuns(1)
 	m, _ = press(t, m, "t")
-	if m.top().view != backlogView || len(m.pages) != 1 {
+	if m.top().view != backlogView || len(m.pages) != 2 {
 		t.Fatalf("t from a scoped :runs: view = %s (%d pages)", m.top().view.name, len(m.pages))
 	}
 }
