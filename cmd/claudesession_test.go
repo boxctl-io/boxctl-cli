@@ -205,3 +205,14 @@ func TestSessionShellAfterExit(t *testing.T) {
 		t.Errorf("PATH isn't exported for the shell: %q", line)
 	}
 }
+
+// TestSessionContinueFallsBack: --continue with no conversation to resume
+// starts a fresh session instead of leaving the user at a shell.
+func TestSessionContinueFallsBack(t *testing.T) {
+	s := newTaskSession("/w/app", "")
+	s.shellAfter = true
+	line := s.commandLine("", []string{"--continue"})
+	if !strings.Contains(line, "claude '--continue' || claude;") {
+		t.Errorf("got %q", line)
+	}
+}
