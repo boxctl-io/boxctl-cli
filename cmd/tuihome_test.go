@@ -73,15 +73,16 @@ func TestTUIHome(t *testing.T) {
 		t.Fatalf("esc went to %v, want home", m.top().kind)
 	}
 
-	// The one-key switches work on home; :home comes back from anywhere.
+	// The one-key switches work on home; :home goes to the split above
+	// both sides from anywhere.
 	m, _ = press(t, m, "b")
 	if m.top().view != boxesView {
 		t.Fatalf("b opened %v, want boxes", m.top().view)
 	}
 	next, _ = m.runCommand("home")
 	m = next.(tuiModel)
-	if len(m.pages) != 1 || m.top().kind != pageHome {
-		t.Fatalf(":home left %d pages, top %v", len(m.pages), m.top().kind)
+	if !m.atTop {
+		t.Fatal(":home didn't go to the split")
 	}
 }
 
@@ -104,7 +105,7 @@ func TestBoardHome(t *testing.T) {
 	if m.top().view != backlogView {
 		t.Fatalf("enter opened %v, want backlog", m.top().view)
 	}
-	// c makes no box on the board's home, and :create says where it is.
+	// c makes no box on the board's home; :create switches to the boxes.
 	m.goHome()
 	m, _ = press(t, m, "c")
 	if m.create != nil {
@@ -112,7 +113,7 @@ func TestBoardHome(t *testing.T) {
 	}
 	next, _ = m.runCommand("create")
 	m = next.(tuiModel)
-	if m.create != nil || !m.flashErr || !strings.Contains(m.flash, "boxctl tui") {
-		t.Errorf(":create on the board: create=%v flash=%q", m.create != nil, m.flash)
+	if m.create == nil || m.app != boxesApp {
+		t.Errorf(":create on the board: create=%v app=%s", m.create != nil, m.app.name)
 	}
 }

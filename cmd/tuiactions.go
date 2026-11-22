@@ -50,6 +50,12 @@ func (m tuiModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return next, tea.Batch(cmds...)
 	}
+	if msg.String() == "ctrl+t" {
+		return m, m.enter(m.app.other())
+	}
+	if m.atTop {
+		return m.handleTopKey(msg)
+	}
 	switch m.top().kind {
 	case pageText:
 		return m.handleTextKey(msg)
@@ -88,24 +94,35 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 	switch words[0] {
 	case "q", "quit", "exit":
 		return m, tea.Quit
-	case "home", "main":
-		m.goHome()
+	case "home", "main", "top":
+		m.goTop()
 		return m, nil
+	case "board", "work":
+		cmd := m.enter(boardApp)
+		m.goHome()
+		return m, cmd
+	case "tui":
+		cmd := m.enter(boxesApp)
+		m.goHome()
+		return m, cmd
 	case "help", "h", "?":
 		m.pushHelp()
 		return m, nil
 	case "create", "new":
-		if !m.app.creates {
-			return m, m.fail(":create is in boxctl tui; the board makes boxes for its runs itself")
-		}
-		return m.openCreate("", "")
+		cmd := m.enter(boxesApp)
+		next, more := m.openCreate("", "")
+		return next, tea.Batch(cmd, more)
 	case "ssh", "shell":
 		if len(words) < 2 {
 			return m, m.fail("usage: :ssh <box>")
 		}
 		return m.ssh(words[1])
 	}
-	if v := m.app.findView(words[0]); v != nil {
+	v := m.app.findView(words[0])
+	if v == nil {
+		v = m.app.other().findView(words[0]) // openView switches sides
+	}
+	if v != nil {
 		cmd := m.openView(v)
 		if len(words) > 1 {
 			// `:boxes web` opens the view filtered, like k9s's `:pods nginx`.
@@ -113,10 +130,8 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	if other := m.app.otherApp(words[0]); other != "" {
-		return m, m.fail(":%s is in %s", words[0], other)
-	}
-	return m, m.fail("unknown command %q (try :home, :%s, :help, :q)", words[0], strings.ReplaceAll(m.app.viewNames(), ", ", ", :"))
+	return m, m.fail("unknown command %q (try :home, :%s, :%s, :help, :q)", words[0],
+		strings.ReplaceAll(boxesApp.viewNames(), ", ", ", :"), strings.ReplaceAll(boardApp.viewNames(), ", ", ", :"))
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -543,7 +558,9 @@ func (m *tuiModel) pushHelp() {
 	general := [][2]string{
 		{":<view>", "switch view: " + m.app.viewNames() + " (`:" + m.app.views[0].name + " web` filters too; tab completes)"},
 		{strings.Join(keys, "/"), "switch to " + strings.Join(views, ", ") + " with one key"},
-		{":home", "the home page, a tile per view (esc from a view goes there too)"},
+		{"ctrl-t", "switch to " + m.app.other().label + " (from anywhere; each side stays where you left it)"},
+		{":home", "the split between Boxes and Board (esc on a side's home goes there too)"},
+		{":board/:tui", "the board's / the boxes' home; a view of the other side (:backlog, :urls) switches to it"},
 	}
 	if m.app.creates {
 		general = append(general, [2]string{":create", "create a box"})

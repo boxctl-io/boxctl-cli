@@ -2,30 +2,36 @@ package cmd
 
 import "strings"
 
-// A tuiApp is one of the two full-screen apps built on the tui's model,
-// tables and rendering:
+// A tuiApp is one of the tui's two sides, on one model, its tables and
+// rendering:
 //
-//   - `boxctl tui` (and bare `boxctl`), boxesApp: the boxes and what goes
-//     with them -- public URLs, images, sizes, backups. It never runs the
-//     backlog.
-//   - `boxctl board`, boardApp: the agent work -- the backlog of goals,
-//     the runs working on them, the GitHub repositories to start from. It
-//     runs the backlog's passes while it's open, as `boxctl backlog
-//     dispatch` does.
+//   - boxesApp: the boxes and what goes with them -- public URLs, images,
+//     sizes, backups. `boxctl tui` starts on it.
+//   - boardApp: the agent work -- the backlog of goals, the runs working
+//     on them, the GitHub repositories to start from. `boxctl board`
+//     starts on it.
 //
-// An app is only which views it has (the : prompt's, its home tiles, its
-// one-key switches), what it lists at start, and whether it runs the
-// backlog; every key and listing in a view is the same in either. A run's
-// box is still reachable from the board (`s`/`l` in :runs), since the
-// boxes are listed in both.
+// Bare `boxctl` starts above both, on the split (tuitop.go), and ctrl-t
+// switches between them from anywhere; each side keeps its own page
+// stack, so switching back finds the page left. The backlog's passes
+// start the first time the board is shown and run until the tui quits
+// (tuiModel.backlogOn), so a session that never opens the board never
+// starts or kills a run.
+//
+// A side is only which views it has (its home tiles, its one-key
+// switches, the ones the : prompt offers first), what it lists, and
+// whether it creates boxes; every key and listing in a view is the same
+// in either. A view of the other side at the : prompt switches to it.
 type tuiApp struct {
-	name     string       // the command, for messages: "tui", "board"
+	name     string       // the command that starts on it: "tui", "board"
+	label    string       // its title on the split and its crumb: "Boxes"
+	blurb    string       // what it is, on the split
 	views    []*tableView // the : prompt's views, in tab completion's order
 	tiles    []homeTile
 	screens  []screenKey
 	listings []string // listed at start for the tiles' counts, besides the boxes
-	backlog  bool     // loads the backlog and runs its passes
-	creates  bool     // c on home and :create make a box
+	backlog  bool     // shows the backlog: the passes start when it's first shown
+	creates  bool     // c on its home makes a box
 }
 
 // screenKey switches to a view with one keystroke from home or any table.
@@ -36,6 +42,8 @@ type screenKey struct {
 
 var boxesApp = &tuiApp{
 	name:  "tui",
+	label: "Boxes",
+	blurb: "Your machines, their URLs, images, sizes and backups",
 	views: []*tableView{boxesView, urlsView, imagesView, sizesView, backupsView},
 	tiles: []homeTile{
 		{boxesView, "Your machines, running and paused", "box"},
@@ -51,6 +59,8 @@ var boxesApp = &tuiApp{
 
 var boardApp = &tuiApp{
 	name:  "board",
+	label: "Board",
+	blurb: "The agent work: goals, their runs, your repos",
 	views: []*tableView{backlogView, runsView, reposView},
 	tiles: []homeTile{
 		{backlogView, "Goals waiting for a run, and PRs", "goal"},
@@ -99,18 +109,26 @@ func (a *tuiApp) viewNames() string {
 	return strings.Join(names, ", ")
 }
 
+// tuiApps are the sides, in the split's order.
+var tuiApps = []*tuiApp{boxesApp, boardApp}
+
+// other is the side ctrl-t switches to.
+func (a *tuiApp) other() *tuiApp {
+	if a == boardApp {
+		return boxesApp
+	}
+	return boardApp
+}
+
 // commandNames are what the : prompt suggests, in the order it offers
-// them: the views, then the other commands.
+// them (tab takes the first match): this side's views, the other side's,
+// then the other commands.
 func (a *tuiApp) commandNames() []string {
 	var names []string
-	for _, v := range a.views {
+	for _, v := range append(append([]*tableView{}, a.views...), a.other().views...) {
 		names = append(names, v.name)
 	}
-	names = append(names, "home")
-	if a.creates {
-		names = append(names, "create")
-	}
-	return append(names, "help", "ssh", "quit")
+	return append(names, "home", "board", "create", "help", "ssh", "quit")
 }
 
 // findView is the view `:name` means in this app, nil for none.
@@ -129,13 +147,14 @@ func (a *tuiApp) findView(name string) *tableView {
 	return nil
 }
 
-// otherApp names the app that has view name, for `:runs` in the tui:
-// "boxctl board", or "" when neither app has it.
-func (a *tuiApp) otherApp(name string) string {
-	for _, o := range []*tuiApp{boxesApp, boardApp} {
-		if o != a && o.findView(name) != nil {
-			return "boxctl " + o.name
+// appOf is the side with view v.
+func appOf(v *tableView) *tuiApp {
+	for _, a := range tuiApps {
+		for _, av := range a.views {
+			if av == v {
+				return a
+			}
 		}
 	}
-	return ""
+	return boxesApp
 }

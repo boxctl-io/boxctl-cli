@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boxctl-io/boxctl-cli/internal/backlog"
 	"github.com/boxctl-io/boxctl-cli/internal/client"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -149,6 +150,8 @@ func press(t *testing.T, m tuiModel, key string) (tuiModel, tea.Cmd) {
 		msg = tea.KeyMsg{Type: tea.KeyEsc}
 	case "ctrl+d":
 		msg = tea.KeyMsg{Type: tea.KeyCtrlD}
+	case "ctrl+t":
+		msg = tea.KeyMsg{Type: tea.KeyCtrlT}
 	case "tab":
 		msg = tea.KeyMsg{Type: tea.KeyTab}
 	case "down":
@@ -876,18 +879,76 @@ func TestTUIScreenKeys(t *testing.T) {
 	}
 }
 
-// TestTUIOtherAppView: a view of the other app is named, not opened.
-func TestTUIOtherAppView(t *testing.T) {
-	m := boxesTUI(nil)
-	next, _ := m.runCommand("backlog")
+// TestTUISwitchSides: bare boxctl's split, ctrl-t, a view of the other
+// side at the : prompt, and the backlog starting only with the board.
+func TestTUISwitchSides(t *testing.T) {
+	m := newTUI(nil, nil)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	m = next.(tuiModel)
-	if m.top().view != boxesView || !strings.Contains(m.flash, "boxctl board") {
-		t.Errorf(":backlog in boxctl tui: view %s, flash %q", m.top().view.name, m.flash)
+	m.backlog = &backlog.Backlog{}
+	if !m.atTop || m.backlogOn {
+		t.Fatalf("bare start: atTop=%v backlogOn=%v", m.atTop, m.backlogOn)
 	}
-	b := boardTUI(nil)
-	next, _ = b.runCommand("urls")
-	b = next.(tuiModel)
-	if b.top().view != backlogView || !strings.Contains(b.flash, "boxctl tui") {
-		t.Errorf(":urls on the board: view %s, flash %q", b.top().view.name, b.flash)
+	view := m.View()
+	for _, want := range []string{"Boxes", "Board", ":boxes :urls", ":backlog :runs :repos", "the backlog runs once you open the board"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the split lacks %q:\n%s", want, view)
+		}
+	}
+
+	// enter opens Boxes' home; esc comes back up; right, enter the board's.
+	m, _ = press(t, m, "enter")
+	if m.atTop || m.app != boxesApp || m.top().kind != pageHome {
+		t.Fatalf("enter: atTop=%v app=%s", m.atTop, m.app.name)
+	}
+	m, _ = press(t, m, "u")
+	m, _ = press(t, m, "esc") // :urls -> boxes' home
+	m, _ = press(t, m, "esc") // -> the split
+	if !m.atTop {
+		t.Fatal("esc on Boxes' home didn't go to the split")
+	}
+	m, _ = press(t, m, "right")
+	m, _ = press(t, m, "enter")
+	if m.app != boardApp || !m.backlogOn {
+		t.Fatalf("board: app=%s backlogOn=%v", m.app.name, m.backlogOn)
+	}
+
+	// ctrl-t switches sides, each kept where it was left.
+	m, _ = press(t, m, "u") // :runs
+	m, _ = press(t, m, "ctrl+t")
+	if m.app != boxesApp || m.top().kind != pageHome {
+		t.Fatalf("ctrl-t: app=%s top=%v", m.app.name, m.top().kind)
+	}
+	m, _ = press(t, m, "b")
+	m, _ = press(t, m, "ctrl+t")
+	if m.app != boardApp || m.top().view != runsView {
+		t.Fatalf("ctrl-t back: app=%s view=%v", m.app.name, m.top().view)
+	}
+	m, _ = press(t, m, "ctrl+t")
+	if m.top().view != boxesView || !m.backlogOn {
+		t.Fatalf("ctrl-t again: view=%v backlogOn=%v (the backlog keeps running)", m.top().view, m.backlogOn)
+	}
+	if !strings.Contains(m.View(), "Backlog:") {
+		t.Error("the boxes' header doesn't say the backlog is running")
+	}
+
+	// A view of the other side at the : prompt switches to it.
+	next, _ = m.runCommand("backlog")
+	m = next.(tuiModel)
+	if m.app != boardApp || m.top().view != backlogView {
+		t.Fatalf(":backlog from the boxes: app=%s view=%v", m.app.name, m.top().view)
+	}
+	next, _ = m.runCommand("urls")
+	m = next.(tuiModel)
+	if m.app != boxesApp || m.top().view != urlsView {
+		t.Fatalf(":urls from the board: app=%s view=%v", m.app.name, m.top().view)
+	}
+
+	// boxctl tui never starts the backlog until the board is shown.
+	if b := newTUI(nil, boxesApp); b.backlogOn || b.atTop {
+		t.Errorf("boxctl tui: backlogOn=%v atTop=%v", b.backlogOn, b.atTop)
+	}
+	if b := newTUI(nil, boardApp); !b.backlogOn {
+		t.Error("boxctl board doesn't run the backlog")
 	}
 }
