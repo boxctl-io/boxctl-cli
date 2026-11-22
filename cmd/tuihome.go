@@ -231,7 +231,7 @@ func (m tuiModel) handleHomeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "R", "ctrl+r", "f5":
 		return m, m.refresh()
 	case "q":
-		return m, m.say("type :q to quit")
+		return m, tea.Quit
 	}
 	return m, nil
 }

@@ -62,7 +62,7 @@ view comes back to it (:home from anywhere).
   r            in :backups, restore the backup as a new box (asks for a name)
   ctrl-d       delete the box (asks first)
   0 / 1 / 2    all boxes / running only / paused only
-  esc          back; ctrl-c or :q quits`,
+  esc          back; q (on home), ctrl-c or :q quits`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !isTTY() || !term.IsTerminal(int(os.Stdin.Fd())) {

@@ -365,19 +365,17 @@ func TestTUIListAndKeys(t *testing.T) {
 		t.Errorf("server saw %v", *calls)
 	}
 
-	// q on a view goes home; a bare q there doesn't quit; :q does.
+	// q on a view goes home; q on home quits.
 	m, _ = press(t, m, "q")
 	if m.top().kind != pageHome {
 		t.Errorf("q on :urls went to %v, want home", m.top().kind)
 	}
-	m, cmd = press(t, m, "q")
-	if cmd != nil {
-		if _, ok := cmd().(tea.QuitMsg); ok {
-			t.Error("q quit the tui")
-		}
+	_, cmd = press(t, m, "q")
+	if cmd == nil {
+		t.Fatal("q on home returned no command")
 	}
-	if !strings.Contains(m.flash, ":q") {
-		t.Errorf("q: flash=%q", m.flash)
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("q on home didn't quit")
 	}
 
 	// An unknown command is refused; :q quits.
