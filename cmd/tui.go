@@ -34,15 +34,19 @@ var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Browse and manage your boxes in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your boxes, laid out like k9s.
-The agent work -- the backlog of goals, their runs, the repositories to
-start from -- is boxctl board, built the same way.
+It's one side of two: the other, the board, is the agent work -- the
+backlog of goals, their runs, the repositories to start from. ctrl-t
+switches between them from anywhere, each kept where you left it; bare
+boxctl starts on the split above both, and boxctl board on the board.
 
-It starts on home: a tile per view with what it shows and a live count;
-arrows (or j/k, tab) move between tiles, enter opens one, and esc from a
-view comes back to it (:home from anywhere).
+It starts on the boxes' home: a tile per view with what it shows and a
+live count; arrows (or j/k, tab) move between tiles, enter opens one,
+esc from a view comes back to it, and esc there goes up to the split
+(:home from anywhere).
 
-  :boxes :urls :images :sizes :backups   switch view (also :home, :q, :help, :create, :ssh <box>)
+  :boxes :urls :images :sizes :backups   switch view (also :home, :board, :q, :help, :create, :ssh <box>)
   b / u        :boxes / :urls with one key
+  ctrl-t       switch to the board (also :backlog, :runs, :repos)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the box; y its JSON; l a --goal run's log
@@ -64,19 +68,24 @@ view comes back to it (:home from anywhere).
 var boardCmd = &cobra.Command{
 	Use:   "board",
 	Short: "The backlog of goals, their runs and your repos, in a terminal UI",
-	Long: `Opens a live, full-screen view of the agent work, laid out like
-boxctl tui: the backlog of goals (boxctl backlog), every run working on
-them (boxctl runs), and the GitHub repositories to start Claude on. While
-it's open it runs the backlog -- starting runs as slots free up, watching
+	Long: `Opens the tui on the board: the agent work -- the backlog of goals
+(boxctl backlog), every run working on them (boxctl runs), and the GitHub
+repositories to start Claude on. The other side, the boxes, is ctrl-t
+away (boxctl tui starts there).
+
+Once the board has been shown, the tui runs the backlog until it quits,
+whichever side you're on -- starting runs as slots free up, watching
 their pull requests -- as boxctl backlog dispatch does; only one of them
-runs it at a time. The boxes themselves are boxctl tui.
+runs it at a time. A tui that never shows the board never runs it.
 
-It starts on home: a tile per view with what it shows and a live count;
-arrows (or j/k, tab) move between tiles, enter opens one, and esc from a
-view comes back to it (:home from anywhere).
+It starts on the board's home: a tile per view with what it shows and a
+live count; arrows (or j/k, tab) move between tiles, enter opens one,
+esc from a view comes back to it, and esc there goes up to the split
+above both sides (:home from anywhere).
 
-  :backlog :runs :repos   switch view (also :home, :q, :help, :ssh <box>)
+  :backlog :runs :repos   switch view (also :home, :tui, :q, :help, :ssh <box>)
   t / u / h    :backlog / :runs / :repos with one key
+  ctrl-t       switch to the boxes (also :boxes, :urls, ...)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   :backlog     a adds a goal (the repository picked from a list: type to
@@ -97,7 +106,8 @@ view comes back to it (:home from anywhere).
 	},
 }
 
-// runTUIApp runs app full-screen until it quits.
+// runTUIApp runs the tui full-screen until it quits, starting on app's
+// home (nil: the split above both sides).
 func runTUIApp(app *tuiApp) error {
 	if !isTTY() || !term.IsTerminal(int(os.Stdin.Fd())) {
 		if app == boardApp {
@@ -108,16 +118,16 @@ func runTUIApp(app *tuiApp) error {
 	// Restore polls with a spinner on stderr; the screen is ours.
 	client.QuietProgress()
 	m := newTUI(newClient(), app)
-	if app.backlog {
-		if qr, err := newBacklogRunner(m.c); err == nil {
-			m.qr = qr
-			defer func() {
-				if n := qr.inFlight(); n > 0 {
-					fmt.Fprintf(os.Stderr, "Waiting for %d backlog run(s) to finish starting (Ctrl-C leaves them half-started)...\n", n)
-				}
-				qr.release()
-			}()
-		}
+	// The runner claims the backlog only when a pass runs (once the board
+	// is shown), and release gives up only a claim it holds.
+	if qr, err := newBacklogRunner(m.c); err == nil {
+		m.qr = qr
+		defer func() {
+			if n := qr.inFlight(); n > 0 {
+				fmt.Fprintf(os.Stderr, "Waiting for %d backlog run(s) to finish starting (Ctrl-C leaves them half-started)...\n", n)
+			}
+			qr.release()
+		}()
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	final, err := p.Run()
@@ -135,14 +145,14 @@ func init() {
 	rootCmd.RunE = runBareRoot
 }
 
-// runBareRoot is `boxctl` with no subcommand: the tui, as `boxctl tui`
-// (onctl does the same). Off a terminal -- a pipe, a script -- or
+// runBareRoot is `boxctl` with no subcommand: the tui, on the split above
+// its two sides (onctl also starts its tui bare). Off a terminal -- a pipe, a script -- or
 // before a login it prints the help, which `boxctl --help` always does.
 func runBareRoot(cmd *cobra.Command, args []string) error {
 	if cfg == nil || cfg.Token == "" || !isTTY() || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return cmd.Help()
 	}
-	return tuiCmd.RunE(tuiCmd, args)
+	return runTUIApp(nil)
 }
 
 // tuiRefreshEvery paces the list's own refreshes while nothing else is
@@ -244,7 +254,17 @@ type tuiDialog struct {
 
 type tuiModel struct {
 	c   *client.Client
-	app *tuiApp // boxctl tui's or boxctl board's views (tuiapp.go)
+	app *tuiApp // the side shown, or last shown under the split (tuiapp.go)
+
+	// atTop: the split above both sides is shown (tuitop.go), topCursor
+	// its selected side. stacks keeps the other side's pages, so ctrl-t
+	// back finds them as they were.
+	atTop     bool
+	topCursor int
+	stacks    map[*tuiApp][]page
+	// backlogOn: the board has been shown, so the backlog's passes run
+	// (until the tui quits, whichever side is shown).
+	backlogOn bool
 
 	vms     []client.VM // every box, as ls sorts them
 	images  []client.Image
@@ -286,6 +306,7 @@ type tuiModel struct {
 	fatal         error
 }
 
+// newTUI starts on app's home, or on the split above both sides for nil.
 func newTUI(c *client.Client, app *tuiApp) tuiModel {
 	f := textinput.New()
 	f.Prompt = ""
@@ -293,20 +314,28 @@ func newTUI(c *client.Client, app *tuiApp) tuiModel {
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = strings.Join(app.commandNames(), ", ")
+	atTop := app == nil
+	if atTop {
+		app = boxesApp
+	}
 	cmd.CharLimit = 80
 	// Typing shows the first command the text starts, greyed out after it;
 	// tab takes it, up/down (ctrl-n/ctrl-p) step through the others.
 	cmd.ShowSuggestions = true
 	cmd.SetSuggestions(app.commandNames())
+	cmd.Placeholder = "a view (tab completes), home, board, create, help, q"
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: spinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
 	return tuiModel{
 		c:           c,
 		app:         app,
+		atTop:       atTop,
+		topCursor:   appIndex(app),
+		stacks:      map[*tuiApp][]page{},
+		backlogOn:   app.backlog && !atTop,
 		loaded:      map[string]bool{},
 		loading:     map[string]bool{},
-		pages:       []page{homePage()},
+		pages:       []page{homePage(app)},
 		stateFilter: showAllBoxes,
 		filter:      f,
 		command:     cmd,
@@ -316,11 +345,10 @@ func newTUI(c *client.Client, app *tuiApp) tuiModel {
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.list("boxes"), m.tick(), m.spin.Tick}
-	if m.app.backlog {
-		cmds = append(cmds, loadBacklogMsg)
-	}
-	for _, r := range m.app.listings {
+	// Both sides' counts, for the split and either home: the boxes, the
+	// backlog (a file here) and the server's quick listings.
+	cmds := []tea.Cmd{m.list("boxes"), m.tick(), m.spin.Tick, loadBacklogMsg}
+	for _, r := range boxesApp.listings {
 		cmds = append(cmds, m.list(r))
 	}
 	return tea.Batch(cmds...)
@@ -427,7 +455,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuiTickMsg:
 		cmds := []tea.Cmd{m.refresh(), m.tick()}
-		if m.app.backlog && time.Since(m.backlogPassAt) >= backlogPassEvery {
+		if m.backlogOn && time.Since(m.backlogPassAt) >= backlogPassEvery {
 			cmds = append(cmds, m.backlogPass())
 		}
 		return m, tea.Batch(cmds...)
@@ -682,10 +710,12 @@ func (m *tuiModel) moveTo(last bool) {
 
 // openView makes v the only page over home (k9s's `:resource`), listing
 // what it needs.
+// A view of the other side switches to it first.
 func (m *tuiModel) openView(v *tableView) tea.Cmd {
-	m.pages = []page{homePage(), {kind: pageTable, view: v, sortCol: -1}}
+	side := m.enter(appOf(v))
+	m.pages = []page{homePage(m.app), {kind: pageTable, view: v, sortCol: -1}}
 	m.filter.SetValue("")
-	return tea.Batch(m.list(v.resource), m.spinIfBusy())
+	return tea.Batch(side, m.list(v.resource), m.spinIfBusy())
 }
 
 // sortBackups is newest first, as `boxctl backups` lists them.

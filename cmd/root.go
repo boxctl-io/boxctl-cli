@@ -77,10 +77,11 @@ var rootCmd = &cobra.Command{
 	Short: "Manage your boxctl.io Firecracker microVMs from the command line",
 	Long: `boxctl talks to the boxctl-vms control plane behind boxctl.io to boot,
 list, connect to, and destroy your Firecracker microVMs ("boxes").`,
-	Example: `  # Browse your boxes in the terminal UI (the same as boxctl tui)
+	Example: `  # The terminal UI: your boxes, and the board of agent work (ctrl-t)
   boxctl
 
-  # The backlog of goals, their runs and your repos (and run the backlog)
+  # Straight to the boxes, or to the board (which runs the backlog)
+  boxctl tui
   boxctl board
 
   # Save your personal access token (create one at ` + dashboardURL + `)

@@ -125,15 +125,21 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `tuicreate.go`, `tuirepos.go`, `tuihome.go` — `tui` and `board`: two
   apps the way k9s shows a cluster (Bubble
   Tea, with Lip Gloss and Bubbles' textinput, textarea and spinner --
-  the one place those are used). `tuiapp.go`'s `tuiApp` is all that
-  differs between them: `boxesApp` (`boxctl tui`, bare `boxctl`: `:boxes`,
-  `:urls`, `:images`, `:sizes`, `:backups`, `c`/`:create`) and `boardApp`
-  (`boxctl board`: `:backlog`, `:runs`, `:repos`, and the only one that
-  loads the backlog and runs its passes) -- each its views (the `:`
-  prompt's, `findView`), home tiles, one-key `screens` and start-up
-  `listings`. Both list the boxes, so `:runs`' box keys work on the
-  board; a view of the other app at the `:` prompt is named
-  (`otherApp`), not opened. A new view goes into one app's lists. A goal prompt (`g`, `a`) is
+  the one place those are used). One tui, two sides: `tuiapp.go`'s
+  `tuiApp` is all that differs between them: `boxesApp` (`boxctl tui`:
+  `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`, `c` on its home) and
+  `boardApp` (`boxctl board`: `:backlog`, `:runs`, `:repos`) -- each its
+  views (`findView`), home tiles, one-key `screens` and `listings`.
+  `tuitop.go` is the split above both (`atTop`; bare `boxctl` starts
+  there, `:home` and esc on a side's home go there) and `enter`, the one
+  way to change sides: it keeps the side left in `stacks`, so ctrl-t (from
+  anywhere) finds each as it was, and `openView` calls it, so a view of
+  the other side at the `:` prompt just switches. The backlog's passes
+  run once the board has been shown (`backlogOn`) until quit, whichever
+  side; the boxes' header then says so on its last line. A session that
+  never shows the board never runs them. Both sides list the boxes, so
+  `:runs`' box keys work on the board. A new view goes into one side's
+  lists. A goal prompt (`g`, `a`) is
   `promptText`, a textarea sized to the dialog so a long goal wraps
   onto the next line; enter submits it. Other prompts are one-line
   `prompt`s. `tuiviews.go` defines the resource views, each
@@ -487,7 +493,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   keeps a pass from calling a run still being set up lost. A refusal
   (`isRefusal` matches `internal/client`'s `refusalMessage` text) drops
   the run uncharged and backs off. The passes run in `boxctl board` every
-  `backlogPassEvery` (any view; never in `boxctl tui`) or in `boxctl backlog dispatch`;
+  `backlogPassEvery` (once the board has been shown) or in `boxctl backlog dispatch`;
   `Backlog.Claim` keeps it to one loop. A merge here (`backlog merge`,
   the board's `m`) marks the item done itself (`markBacklogMerged`) instead
   of waiting for a pass to see the PR merged, and a tui key's pass asked
