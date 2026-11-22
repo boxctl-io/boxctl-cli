@@ -32,6 +32,7 @@ boxctl rm my-box                            # done
 | `login` / `logout` | Save or forget your personal token |
 | `create`, `ls`, `rm`, `pause`, `resume`, `keep` | Box lifecycle (`rm`/`pause`/`resume` also take `all`) |
 | `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`; `/` to filter |
+| `dashboard` | The same as `tui`, as a web page served on `127.0.0.1` and opened in your browser, with a terminal on a box in the page |
 | `images`, `sizes` | What you can boot, and at what size |
 | `ssh`, `ssh-proxy` | Shell or one-off command; real `ssh`/`scp`/`rsync` through a proxy |
 | `cp` | Copy a file or directory (`-r`) between a box and this machine, any size |
@@ -111,6 +112,7 @@ boxctl ls -a                      # all of them, paused and stopped too
 boxctl ls -p                      # this directory's project's boxes: its own, its runs and goals
 boxctl ls -o json                 # for scripts; images and sizes take -o json too
 boxctl tui                        # (or just `boxctl` on a terminal) k9s-style: :boxes/:urls/:images/:sizes/:backups, / filter, s shell, d describe, ctrl-d delete, ? keys
+boxctl dashboard                  # the tui as a local web page (127.0.0.1 only, opened in your browser); --port, --no-browser
 boxctl board                      # the same for the agent work: :backlog/:runs/:repos, and it runs the backlog
 # on a terminal, ls then fills in each PR's state (open, merged, closed) via `gh pr view` without holding up the list
 boxctl images

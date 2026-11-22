@@ -204,6 +204,23 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `tui_test.go` drives the model with messages and keys against an
   `httptest` server (`tuiFlashFor` is a variable so the flash timers it
   runs don't wait). The plain, pre-k9s version is tagged `tui-plain`.
+- `cmd/dashboard.go`, `dashboard.html` — `boxctl dashboard`: the tui's
+  boxes app (boxes, URLs, images, sizes, backups; create, pause, resume,
+  keep, expose/unexpose, delete with rm's unfinished-goal warning,
+  restore, a goal run's log) as a web page. `dashboard.html` is embedded
+  (`go:embed`), vanilla JS, no build step; xterm.js and its fit addon come
+  from jsdelivr, pinned with SRI hashes. The page calls a small JSON API
+  on the same server, which makes the `Client` calls the tui makes with
+  the saved token -- the token never reaches the browser -- and computes
+  `ls`'s columns (`runText`, `projectText`, `prText`, `describeBox`) so
+  the page doesn't know label conventions (`dashboardBox`). A terminal is
+  `/ws/terminal/{name}[?session=N]` proxied message for message
+  (`relayWS`) to the box's, the ticket minted here; the page speaks
+  ssh.go's resize protocol itself. The gate (`ServeHTTP`): 127.0.0.1
+  only, a random secret in the opened link (`?k=`) traded for a
+  SameSite=Strict HttpOnly cookie, Host must be the loopback address
+  (DNS rebinding) and any Origin the page's own. Keep every route behind
+  it. `claude --box` sessions and the board's views aren't in it.
 - `cmd/create.go` — `create -a <script>` blocks until the server's
   `onctl create -a` finishes, so meanwhile `applyLogTail` polls the
   script's log (`~/.onctl/applyNN/output-<script>.log`, where onctl's
