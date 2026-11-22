@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `boxctl runs` and the tui's :runs: every run of every backlog item, the
+// `boxctl runs` and boxctl board's :runs: every run of every backlog item, the
 // ones going and the ones that ended, one row each. The rows come from
 // the backlog file (each item keeps its runs), joined to the box listing
 // for how a run that's going is doing.
@@ -24,7 +24,7 @@ var runsCmd = &cobra.Command{
 	Long: `Every run of every backlog item, one row each: the ones going first,
 then the newest first. A run that's going shows how its box says it's
 doing; one that ended shows how it ended (done, failed, lost or killed).
-The tui's :runs shows the same, with a run's shell, logs and kill.`,
+boxctl board's :runs shows the same, with a run's shell, logs and kill.`,
 	Args: cobra.NoArgs,
 	RunE: runRuns,
 }
@@ -137,7 +137,7 @@ func runRuns(cmd *cobra.Command, args []string) error {
 		return printJSON(out)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(os.Stderr, "No runs yet: boxctl backlog add a goal, and the tui or boxctl backlog dispatch starts them.")
+		fmt.Fprintln(os.Stderr, "No runs yet: boxctl backlog add a goal, and boxctl board or boxctl backlog dispatch starts them.")
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

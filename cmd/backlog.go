@@ -18,7 +18,7 @@ import (
 
 // boxctl backlog: goals waiting to become pull requests, worked on by
 // unattended `boxctl claude --goal` runs, a few at a time (internal/backlog
-// has the rules). The tui's :backlog view runs the passes while it's open;
+// has the rules). boxctl board runs the passes while it's open;
 // `boxctl backlog dispatch` runs them with no screen.
 
 var backlogCmd = &cobra.Command{
@@ -34,14 +34,14 @@ unattended boxctl claude --goal run on a box of its own, a few at a time
   - It's behind its base: GitHub is asked to update the branch, and it's
     ready again only once CI passes on that.
   - Green and up to date: "ready to merge" -- boxctl backlog merge, or m in
-    the tui. Nothing is merged without you.
+    boxctl board. Nothing is merged without you.
 
 Each kind of run gets 2 attempts (boxctl backlog retry adds one); after that
 the item needs you. A run's box is deleted once the next run starts or the
 pull request is merged.
 
-The passes run while boxctl tui is open (:backlog shows the backlog) or
-boxctl backlog dispatch is, never both. Nothing moves while neither is running;
+The passes run while boxctl board is open (its :backlog shows the backlog)
+or boxctl backlog dispatch is, never both. Nothing moves while neither is running;
 runs already on boxes carry on.
 
   boxctl backlog add --repo owner/name "bump Go and fix what breaks"
@@ -106,7 +106,7 @@ var backlogAddCmd = &cobra.Command{
 		}
 		fmt.Printf("Queued #%d on %s.\n", it.ID, it.Repo)
 		if q, err := loadBacklog(); err == nil && (q.Loop == "" || time.Since(q.LoopSeen) > backlog.LoopStale) {
-			fmt.Fprintln(os.Stderr, "Nothing is running the backlog: open boxctl tui (:backlog) or run boxctl backlog dispatch.")
+			fmt.Fprintln(os.Stderr, "Nothing is running the backlog: open boxctl board or run boxctl backlog dispatch.")
 		}
 		return nil
 	},

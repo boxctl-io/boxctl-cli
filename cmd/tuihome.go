@@ -10,12 +10,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// The tui's home page: a tile per view, the agent flow's four first
-// (boxes, backlog, runs, repos), each with what it shows and a live count
-// from the listings already loaded. Arrows (or j/k, tab) move between
-// tiles and enter opens one; the one-key screen switches (b/t/u/h) and
+// The tui's home page: a tile per view of the app (tuiapp.go), each with
+// what it shows and a live count from the listings already loaded. Arrows
+// (or j/k, tab) move between tiles and enter opens one; the app's one-key
+// screen switches and
 // `:` work here as in a table. It is the bottom of the navigation stack:
-// the tui starts on it, a view opened from anywhere sits on top of it, and
+// the app starts on it, a view opened from anywhere sits on top of it, and
 // esc from a view comes back to it (`:home` from anywhere).
 
 // homeTile is one tile: the view it opens and the line saying what it is.
@@ -25,17 +25,6 @@ type homeTile struct {
 	noun  string // what a row is, for the count: "image" -> "3 images"
 }
 
-var homeTiles = []homeTile{
-	{boxesView, "Your machines, running and paused", "box"},
-	{backlogView, "Goals waiting for a run, and PRs", "goal"},
-	{runsView, "Every attempt at a goal", "run"},
-	{reposView, "GitHub repos to start Claude on", "repo"},
-	{urlsView, "Box ports at public URLs", "URL"},
-	{imagesView, "What a new box boots from", "image"},
-	{sizesView, "CPU, memory and disk presets", "size"},
-	{backupsView, "Snapshots to restore as a box", "backup"},
-}
-
 // Tile geometry: tileW/tileH include the tile's own border.
 const (
 	homeTileW   = 36
@@ -43,12 +32,6 @@ const (
 	homeTileGap = 2
 )
 
-// homeListings are the listings the tui asks for at start, besides the
-// boxes and the backlog, so home's tiles have counts: the server's own,
-// which are quick. :repos asks GitHub, so it waits until it's opened.
-var homeListings = []string{"images", "sizes", "backups"}
-
-// homePage is the page the tui starts on.
 func homePage() page { return page{kind: pageHome, title: "home"} }
 
 // goHome makes home the only page.
@@ -60,16 +43,6 @@ func (m *tuiModel) goHome() {
 // homeCols is how many tiles fit across the box (its borders and margin off).
 func (m tuiModel) homeCols() int {
 	return max(1, (max(m.width-2, 1)-1+homeTileGap)/(homeTileW+homeTileGap))
-}
-
-// tileKey is the one-key switch to v, "" for none.
-func tileKey(v *tableView) string {
-	for _, s := range screenKeys {
-		if s.view == v {
-			return s.key
-		}
-	}
-	return ""
 }
 
 // tileCount is the tile's live line: what the view would show, from the
@@ -141,11 +114,11 @@ func (m tuiModel) homeView(w, inner int) (string, []string) {
 		first = r - rowsFit + 1
 	}
 	lines := []string{""}
-	for start := first * cols; start < len(homeTiles) && len(lines)+homeTileH <= inner+1; start += cols {
-		end := min(start+cols, len(homeTiles))
+	for start := first * cols; start < len(m.app.tiles) && len(lines)+homeTileH <= inner+1; start += cols {
+		end := min(start+cols, len(m.app.tiles))
 		var tiles [][]string
 		for i := start; i < end; i++ {
-			tiles = append(tiles, m.tile(homeTiles[i], i == t.cursor))
+			tiles = append(tiles, m.tile(m.app.tiles[i], i == t.cursor))
 		}
 		for row := 0; row < homeTileH; row++ {
 			var parts []string
@@ -155,7 +128,7 @@ func (m tuiModel) homeView(w, inner int) (string, []string) {
 			lines = append(lines, " "+strings.Join(parts, strings.Repeat(" ", homeTileGap)))
 		}
 	}
-	return k9s.title.Render("Home") + k9s.count.Render(fmt.Sprintf("[%d]", len(homeTiles))), lines
+	return k9s.title.Render("Home") + k9s.count.Render(fmt.Sprintf("[%d]", len(m.app.tiles))), lines
 }
 
 // tile is one tile's lines: a border (aqua when selected), the view's
@@ -169,7 +142,7 @@ func (m tuiModel) tile(ht homeTile, selected bool) []string {
 		name = k9s.selected.Render(" " + ht.view.title + " ")
 	}
 	key := ":" + ht.view.name
-	if k := tileKey(ht.view); k != "" {
+	if k := m.app.tileKey(ht.view); k != "" {
 		key = k + "  " + key
 	}
 	head := name
@@ -196,18 +169,18 @@ var homeHotkeys = []hotkey{{"enter", "open"}, {"←↑↓→", "move"}}
 func (m tuiModel) handleHomeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	key := msg.String()
-	if v := screenFor(key); v != nil {
+	if v := m.app.screenFor(key); v != nil {
 		return m, m.openView(v)
 	}
 	cols := m.homeCols()
-	move := func(n int) { t.cursor = min(max(t.cursor+n, 0), len(homeTiles)-1) }
+	move := func(n int) { t.cursor = min(max(t.cursor+n, 0), len(m.app.tiles)-1) }
 	switch key {
 	case "right", "l", "tab":
 		move(1)
 	case "left", "shift+tab":
 		move(-1)
 	case "down", "j":
-		if t.cursor+cols < len(homeTiles) {
+		if t.cursor+cols < len(m.app.tiles) {
 			move(cols)
 		}
 	case "up", "k":
@@ -217,9 +190,9 @@ func (m tuiModel) handleHomeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "home", "g":
 		t.cursor = 0
 	case "end", "G":
-		t.cursor = len(homeTiles) - 1
+		t.cursor = len(m.app.tiles) - 1
 	case "enter":
-		return m, m.openView(homeTiles[t.cursor].view)
+		return m, m.openView(m.app.tiles[t.cursor].view)
 	case ":":
 		m.commanding = true
 		m.command.SetValue("")
@@ -227,7 +200,9 @@ func (m tuiModel) handleHomeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		m.pushHelp()
 	case "c":
-		return m.openCreate("", "")
+		if m.app.creates {
+			return m.openCreate("", "")
+		}
 	case "R", "ctrl+r", "f5":
 		return m, m.refresh()
 	case "q":

@@ -12,10 +12,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// `:backlog`: boxctl backlog in the tui. The rows are ~/.boxctl/backlog.json,
-// read again on every refresh; the passes that move it (backlogdispatch.go) run
-// every backlogPassEvery while the tui is open, whatever view is shown --
-// the tui is the backlog's loop unless `boxctl backlog dispatch` already is.
+// `:backlog`: boxctl backlog in boxctl board. The rows are
+// ~/.boxctl/backlog.json, read again on every refresh; the passes that move
+// it (backlogdispatch.go) run every backlogPassEvery while the board is
+// open, whatever view is shown -- the board is the backlog's loop unless
+// `boxctl backlog dispatch` already is. boxctl tui never runs them.
 
 type (
 	tuiBacklogPassMsg struct {

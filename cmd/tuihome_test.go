@@ -8,16 +8,23 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// boxesTUI is the tui with :boxes open over home, where most tests start
-// (the tui itself starts on home).
+// boxesTUI is boxctl tui with :boxes open over home, where most tests
+// start (the app itself starts on home).
 func boxesTUI(c *client.Client) tuiModel {
-	m := newTUI(c)
+	m := newTUI(c, boxesApp)
 	m.pages = append(m.pages, page{kind: pageTable, view: boxesView, sortCol: -1})
 	return m
 }
 
+// boardTUI is boxctl board with :backlog open over home.
+func boardTUI(c *client.Client) tuiModel {
+	m := newTUI(c, boardApp)
+	m.pages = append(m.pages, page{kind: pageTable, view: backlogView, sortCol: -1})
+	return m
+}
+
 func TestTUIHome(t *testing.T) {
-	m := newTUI(nil)
+	m := newTUI(nil, boxesApp)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(tuiModel)
 	m.loaded["boxes"] = true
@@ -27,10 +34,15 @@ func TestTUIHome(t *testing.T) {
 		t.Fatalf("the tui starts on %v, want home", m.top().kind)
 	}
 	view := m.View()
-	for _, want := range []string{"Home[8]", "Boxes", "Backlog", "Runs", "GitHub Repos", "Public URLs", "Backups",
+	for _, want := range []string{"Home[5]", "Boxes", "Public URLs", "Images", "Sizes", "Backups",
 		"1 running, 1 paused", "b  :boxes", "<home>"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("home lacks %q:\n%s", want, view)
+		}
+	}
+	for _, not := range []string{"Backlog", "Runs", "GitHub Repos"} {
+		if strings.Contains(view, not) {
+			t.Errorf("boxctl tui's home shows %q, which is the board's", not)
 		}
 	}
 
@@ -40,23 +52,21 @@ func TestTUIHome(t *testing.T) {
 	}
 	m, _ = press(t, m, "right")
 	m, _ = press(t, m, "down")
-	if got := homeTiles[m.top().cursor].view; got != urlsView {
-		t.Fatalf("cursor on %s, want urls", got.name)
+	if got := m.app.tiles[m.top().cursor].view; got != backupsView {
+		t.Fatalf("cursor on %s, want backups", got.name)
 	}
 	// Down from the last row stays put; up from the first too.
 	m, _ = press(t, m, "down")
-	m, _ = press(t, m, "down")
 	m, _ = press(t, m, "up")
 	m, _ = press(t, m, "up")
-	m, _ = press(t, m, "up")
-	if got := homeTiles[m.top().cursor].view; got != backlogView {
-		t.Fatalf("cursor on %s, want backlog", got.name)
+	if got := m.app.tiles[m.top().cursor].view; got != urlsView {
+		t.Fatalf("cursor on %s, want urls", got.name)
 	}
 
 	// enter opens the tile's view over home; esc comes back to it.
 	m, _ = press(t, m, "enter")
-	if top := m.top(); top.kind != pageTable || top.view != backlogView || len(m.pages) != 2 {
-		t.Fatalf("enter opened %+v, want backlog over home", top)
+	if top := m.top(); top.kind != pageTable || top.view != urlsView || len(m.pages) != 2 {
+		t.Fatalf("enter opened %+v, want urls over home", top)
 	}
 	m, _ = press(t, m, "esc")
 	if m.top().kind != pageHome {
@@ -64,13 +74,45 @@ func TestTUIHome(t *testing.T) {
 	}
 
 	// The one-key switches work on home; :home comes back from anywhere.
-	m, _ = press(t, m, "u")
-	if m.top().view != runsView {
-		t.Fatalf("u opened %v, want runs", m.top().view)
+	m, _ = press(t, m, "b")
+	if m.top().view != boxesView {
+		t.Fatalf("b opened %v, want boxes", m.top().view)
 	}
 	next, _ = m.runCommand("home")
 	m = next.(tuiModel)
 	if len(m.pages) != 1 || m.top().kind != pageHome {
 		t.Fatalf(":home left %d pages, top %v", len(m.pages), m.top().kind)
+	}
+}
+
+func TestBoardHome(t *testing.T) {
+	m := newTUI(nil, boardApp)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = next.(tuiModel)
+	view := m.View()
+	for _, want := range []string{"Home[3]", "Backlog", "Runs", "GitHub Repos", "t  :backlog", "u  :runs", "h  :repos"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("board home lacks %q:\n%s", want, view)
+		}
+	}
+	for _, not := range []string{"Public URLs", "Backups", "b  :boxes"} {
+		if strings.Contains(view, not) {
+			t.Errorf("the board's home shows %q, which is boxctl tui's", not)
+		}
+	}
+	m, _ = press(t, m, "enter")
+	if m.top().view != backlogView {
+		t.Fatalf("enter opened %v, want backlog", m.top().view)
+	}
+	// c makes no box on the board's home, and :create says where it is.
+	m.goHome()
+	m, _ = press(t, m, "c")
+	if m.create != nil {
+		t.Error("c on the board's home opened the create form")
+	}
+	next, _ = m.runCommand("create")
+	m = next.(tuiModel)
+	if m.create != nil || !m.flashErr || !strings.Contains(m.flash, "boxctl tui") {
+		t.Errorf(":create on the board: create=%v flash=%q", m.create != nil, m.flash)
 	}
 }

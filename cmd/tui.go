@@ -17,7 +17,9 @@ import (
 	"golang.org/x/term"
 )
 
-// `boxctl tui`: your boxes the way k9s shows a cluster (Bubble Tea). A
+// `boxctl tui` and `boxctl board`: two apps on one model (tuiapp.go) --
+// the boxes, and the agent work on them -- shown the way k9s shows a
+// cluster (Bubble Tea). A
 // header with an info block, the current view's hotkeys and a logo; a
 // bordered table per resource view (tuiviews.go), switched with a `:`
 // command and filtered with `/`; describe/json/logs pages you drill
@@ -32,30 +34,20 @@ var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Browse and manage your boxes in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your boxes, laid out like k9s.
+The agent work -- the backlog of goals, their runs, the repositories to
+start from -- is boxctl board, built the same way.
 
 It starts on home: a tile per view with what it shows and a live count;
 arrows (or j/k, tab) move between tiles, enter opens one, and esc from a
 view comes back to it (:home from anywhere).
 
-  :boxes :urls :images :sizes :backups :repos :backlog :runs   switch view (also :home, :q, :help, :create)
-  b / t / u / h   :boxes / :backlog / :runs / :repos with one key
+  :boxes :urls :images :sizes :backups   switch view (also :home, :q, :help, :create, :ssh <box>)
+  b / u        :boxes / :urls with one key
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the box; y its JSON; l a --goal run's log
   s            open a terminal on the box (boxctl ssh)
-  enter        in :repos (your GitHub repos, newest push first, from gh),
-               start Claude on a fresh box with the repo cloned (boxctl claude --repo)
-  g            in :repos, ask for a goal and run it unattended there (--goal)
-  a            in :repos or :backlog, add a goal (boxctl backlog): run when a slot
-               is free, its PR watched -- CI and conflicts get follow-up runs;
-               (in :backlog the repository is picked from a list: type to narrow,
-               up/down to select, tab to complete);
-               in :backlog m merges a ready PR, r retries, ctrl-d cancels, o opens it,
-               enter shows the item's runs
-  :runs        every backlog run, going and ended (boxctl runs): s / l a run's
-               shell / log while its box is there, ctrl-d kills a run that's going
-               (its box deleted, its item left to you until r)
-               While the tui is open it runs the backlog (as boxctl backlog dispatch does).
+  a            open the box's Claude session (boxctl claude --box)
   c            create a box (name, image and size are asked)
   p / r / K    pause / resume / keep (hold off the idle reaper's deletion)
   e            expose a port at a public URL; ctrl-d in :urls takes it down
@@ -65,12 +57,58 @@ view comes back to it (:home from anywhere).
   esc          back; q (on home), ctrl-c or :q quits`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !isTTY() || !term.IsTerminal(int(os.Stdin.Fd())) {
-			return fmt.Errorf("boxctl tui needs a terminal; use `boxctl ls` on a pipe")
+		return runTUIApp(boxesApp)
+	},
+}
+
+var boardCmd = &cobra.Command{
+	Use:   "board",
+	Short: "The backlog of goals, their runs and your repos, in a terminal UI",
+	Long: `Opens a live, full-screen view of the agent work, laid out like
+boxctl tui: the backlog of goals (boxctl backlog), every run working on
+them (boxctl runs), and the GitHub repositories to start Claude on. While
+it's open it runs the backlog -- starting runs as slots free up, watching
+their pull requests -- as boxctl backlog dispatch does; only one of them
+runs it at a time. The boxes themselves are boxctl tui.
+
+It starts on home: a tile per view with what it shows and a live count;
+arrows (or j/k, tab) move between tiles, enter opens one, and esc from a
+view comes back to it (:home from anywhere).
+
+  :backlog :runs :repos   switch view (also :home, :q, :help, :ssh <box>)
+  t / u / h    :backlog / :runs / :repos with one key
+  /text        filter the rows; esc clears
+  j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
+  :backlog     a adds a goal (the repository picked from a list: type to
+               narrow, up/down to select, tab to complete); m merges a ready
+               PR, r retries, ctrl-d cancels, o opens the PR, enter shows
+               the item's runs; L sets how many run at once
+  :runs        every backlog run, going and ended: s / l a run's shell / log
+               while its box is there, a its Claude session, ctrl-d kills a
+               run that's going (its box deleted, its item left to you until r)
+  :repos       your GitHub repos, newest push first (from gh): enter starts
+               Claude on a fresh box with the repo cloned (boxctl claude
+               --repo), g runs a goal there unattended (--goal), a adds one
+               to the backlog
+  esc          back; q (on home), ctrl-c or :q quits`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runTUIApp(boardApp)
+	},
+}
+
+// runTUIApp runs app full-screen until it quits.
+func runTUIApp(app *tuiApp) error {
+	if !isTTY() || !term.IsTerminal(int(os.Stdin.Fd())) {
+		if app == boardApp {
+			return fmt.Errorf("boxctl board needs a terminal; use `boxctl backlog` and `boxctl runs` on a pipe")
 		}
-		// Restore polls with a spinner on stderr; the screen is ours.
-		client.QuietProgress()
-		m := newTUI(newClient())
+		return fmt.Errorf("boxctl tui needs a terminal; use `boxctl ls` on a pipe")
+	}
+	// Restore polls with a spinner on stderr; the screen is ours.
+	client.QuietProgress()
+	m := newTUI(newClient(), app)
+	if app.backlog {
 		if qr, err := newBacklogRunner(m.c); err == nil {
 			m.qr = qr
 			defer func() {
@@ -80,20 +118,20 @@ view comes back to it (:home from anywhere).
 				qr.release()
 			}()
 		}
-		p := tea.NewProgram(m, tea.WithAltScreen())
-		final, err := p.Run()
-		if err != nil {
-			return err
-		}
-		if m, ok := final.(tuiModel); ok && m.fatal != nil {
-			return m.fatal
-		}
-		return nil
-	},
+	}
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	final, err := p.Run()
+	if err != nil {
+		return err
+	}
+	if m, ok := final.(tuiModel); ok && m.fatal != nil {
+		return m.fatal
+	}
+	return nil
 }
 
 func init() {
-	rootCmd.AddCommand(tuiCmd)
+	rootCmd.AddCommand(tuiCmd, boardCmd)
 	rootCmd.RunE = runBareRoot
 }
 
@@ -205,7 +243,8 @@ type tuiDialog struct {
 }
 
 type tuiModel struct {
-	c *client.Client
+	c   *client.Client
+	app *tuiApp // boxctl tui's or boxctl board's views (tuiapp.go)
 
 	vms     []client.VM // every box, as ls sorts them
 	images  []client.Image
@@ -247,23 +286,24 @@ type tuiModel struct {
 	fatal         error
 }
 
-func newTUI(c *client.Client) tuiModel {
+func newTUI(c *client.Client, app *tuiApp) tuiModel {
 	f := textinput.New()
 	f.Prompt = ""
 	f.Placeholder = "filter"
 	f.CharLimit = 80
 	cmd := textinput.New()
 	cmd.Prompt = ""
-	cmd.Placeholder = "home, boxes, urls, images, sizes, backups, repos, backlog, runs, create, help, q"
+	cmd.Placeholder = strings.Join(app.commandNames(), ", ")
 	cmd.CharLimit = 80
 	// Typing shows the first command the text starts, greyed out after it;
 	// tab takes it, up/down (ctrl-n/ctrl-p) step through the others.
 	cmd.ShowSuggestions = true
-	cmd.SetSuggestions(commandNames())
+	cmd.SetSuggestions(app.commandNames())
 	sp := bspinner.New(bspinner.WithSpinner(bspinner.Spinner{Frames: spinnerFrames, FPS: 80 * time.Millisecond}))
 	sp.Style = k9s.logo
 	return tuiModel{
 		c:           c,
+		app:         app,
 		loaded:      map[string]bool{},
 		loading:     map[string]bool{},
 		pages:       []page{homePage()},
@@ -276,8 +316,11 @@ func newTUI(c *client.Client) tuiModel {
 }
 
 func (m tuiModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.list("boxes"), m.tick(), m.spin.Tick, loadBacklogMsg}
-	for _, r := range homeListings {
+	cmds := []tea.Cmd{m.list("boxes"), m.tick(), m.spin.Tick}
+	if m.app.backlog {
+		cmds = append(cmds, loadBacklogMsg)
+	}
+	for _, r := range m.app.listings {
 		cmds = append(cmds, m.list(r))
 	}
 	return tea.Batch(cmds...)
@@ -384,7 +427,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuiTickMsg:
 		cmds := []tea.Cmd{m.refresh(), m.tick()}
-		if time.Since(m.backlogPassAt) >= backlogPassEvery {
+		if m.app.backlog && time.Since(m.backlogPassAt) >= backlogPassEvery {
 			cmds = append(cmds, m.backlogPass())
 		}
 		return m, tea.Batch(cmds...)

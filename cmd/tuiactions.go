@@ -95,6 +95,9 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		m.pushHelp()
 		return m, nil
 	case "create", "new":
+		if !m.app.creates {
+			return m, m.fail(":create is in boxctl tui; the board makes boxes for its runs itself")
+		}
 		return m.openCreate("", "")
 	case "ssh", "shell":
 		if len(words) < 2 {
@@ -102,7 +105,7 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m.ssh(words[1])
 	}
-	if v := findView(words[0]); v != nil {
+	if v := m.app.findView(words[0]); v != nil {
 		cmd := m.openView(v)
 		if len(words) > 1 {
 			// `:boxes web` opens the view filtered, like k9s's `:pods nginx`.
@@ -110,7 +113,10 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-	return m, m.fail("unknown command %q (try :home, :boxes, :urls, :images, :sizes, :backups, :repos, :backlog, :runs, :help, :q)", words[0])
+	if other := m.app.otherApp(words[0]); other != "" {
+		return m, m.fail(":%s is in %s", words[0], other)
+	}
+	return m, m.fail("unknown command %q (try :home, :%s, :help, :q)", words[0], strings.ReplaceAll(m.app.viewNames(), ", ", ", :"))
 }
 
 // --- the / filter ---------------------------------------------------------
@@ -297,7 +303,7 @@ const goalPromptLines = 4
 func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.top()
 	key := msg.String()
-	if v := screenFor(key); v != nil {
+	if v := m.app.screenFor(key); v != nil {
 		return m, m.openView(v)
 	}
 	if t.view == backlogView {
@@ -529,23 +535,36 @@ func (m *tuiModel) pushHelp() {
 		}
 	}
 	lines := []string{"General", ""}
+	var keys, views []string
+	for _, s := range m.app.screens {
+		keys = append(keys, s.key)
+		views = append(views, ":"+s.view.name)
+	}
 	general := [][2]string{
-		{":<view>", "switch view: boxes, urls, images, sizes, backups, repos, backlog, runs (`:boxes web` filters too; tab completes)"},
-		{"b/t/u/h", "switch to :boxes, :backlog, :runs, :repos with one key (in a table)"},
+		{":<view>", "switch view: " + m.app.viewNames() + " (`:" + m.app.views[0].name + " web` filters too; tab completes)"},
+		{strings.Join(keys, "/"), "switch to " + strings.Join(views, ", ") + " with one key"},
 		{":home", "the home page, a tile per view (esc from a view goes there too)"},
-		{":create", "create a box"}, {":ssh <box>", "open a terminal on a box"},
+	}
+	if m.app.creates {
+		general = append(general, [2]string{":create", "create a box"})
+	}
+	general = append(general, [][2]string{
+		{":ssh <box>", "open a terminal on a box"},
 		{":help", "this page"}, {":q", "quit (q on home, ctrl-c too)"},
 		{"/text", "filter the rows; esc clears"},
 		{"j/k ↑/↓", "move; ctrl-f/ctrl-b page; g/G top/bottom"},
 		{"shift+letter", "sort by that column (again: the other way)"},
 		{"esc", "back to the previous page (from a view: home)"}, {"R", "refresh now (also every " + tuiRefreshEvery.String() + ")"},
-	}
+	}...)
 	for _, g := range general {
 		lines = append(lines, fmt.Sprintf("  %-14s %s", g[0], g[1]))
 	}
 	if v == nil {
-		lines = append(lines, "", "Home", "",
-			"  ←↑↓→ (j/k, tab) move between tiles; enter opens the view; c creates a box.")
+		home := "  ←↑↓→ (j/k, tab) move between tiles; enter opens the view."
+		if m.app.creates {
+			home = "  ←↑↓→ (j/k, tab) move between tiles; enter opens the view; c creates a box."
+		}
+		lines = append(lines, "", "Home", "", home)
 		m.push(page{kind: pageText, title: "help", lines: lines})
 		return
 	}
