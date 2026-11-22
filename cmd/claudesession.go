@@ -66,8 +66,17 @@ func (s taskSession) commandLine(prompt string, args []string) string {
 		"if [ -f " + f + " ]; then . " + f + "; rm -f " + f + "; fi;",
 		`PATH="$HOME/` + agent.binDir + `:$PATH"`, "exec", agent.bin,
 	}
-	if s.shellAfter {
-		// No exec, and PATH exported, for the shell that follows.
+	// --continue with nothing to continue ("No conversation found")
+	// exits at once: fall back to a fresh session without it.
+	var fresh []string
+	for _, a := range args {
+		if a != "--continue" {
+			fresh = append(fresh, a)
+		}
+	}
+	retry := len(fresh) != len(args)
+	if s.shellAfter || retry {
+		// No exec, and PATH exported, for the shell that follows or the retry.
 		words = []string{
 			words[0], `export PATH="$HOME/` + agent.binDir + `:$PATH";`, agent.bin,
 		}
@@ -82,6 +91,19 @@ func (s taskSession) commandLine(prompt string, args []string) string {
 		words = append(words, shellQuote(prompt))
 	}
 	line := strings.Join(words, " ")
+	if retry {
+		w := []string{agent.bin}
+		for _, a := range fresh {
+			w = append(w, shellQuote(a))
+		}
+		if prompt != "" {
+			if agent.promptFlag != "" {
+				w = append(w, agent.promptFlag)
+			}
+			w = append(w, shellQuote(prompt))
+		}
+		line += " || " + strings.Join(w, " ")
+	}
 	if s.shellAfter {
 		line += "; echo; echo " + shellQuote(agent.title+" exited. This shell keeps the session; "+agent.bin+" starts it again"+resumeHint()+".") +
 			"; exec bash"
