@@ -354,13 +354,11 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "q":
-		// q only goes back: quitting is :q (or ctrl-c), so a stray q on
-		// the top view doesn't close the tui.
 		if len(m.pages) > 1 {
 			m.pop()
 			return m, nil
 		}
-		return m, m.say("type :q to quit")
+		return m, tea.Quit
 	case "R", "ctrl+r", "f5":
 		if t.view == reposView {
 			return m, tea.Batch(m.refresh(), m.listRepos(true), m.spinIfBusy())
@@ -526,7 +524,7 @@ func (m *tuiModel) pushHelp() {
 		{"b/t/u/h", "switch to :boxes, :backlog, :runs, :repos with one key (in a table)"},
 		{":home", "the home page, a tile per view (esc from a view goes there too)"},
 		{":create", "create a box"}, {":ssh <box>", "open a terminal on a box"},
-		{":help", "this page"}, {":q", "quit (ctrl-c too)"},
+		{":help", "this page"}, {":q", "quit (q on home, ctrl-c too)"},
 		{"/text", "filter the rows; esc clears"},
 		{"j/k ↑/↓", "move; ctrl-f/ctrl-b page; g/G top/bottom"},
 		{"shift+letter", "sort by that column (again: the other way)"},
