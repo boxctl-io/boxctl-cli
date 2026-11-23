@@ -56,7 +56,7 @@ esc from a view comes back to it, and esc there goes up to the split
   p / r / K    pause / resume / keep (hold off the idle reaper's deletion)
   e            expose a port at a public URL; ctrl-d in :urls takes it down
   r            in :backups, restore the backup as a new box (asks for a name)
-  ctrl-d       delete the box (asks first)
+  ctrl-d       delete the box (asks first); space marks boxes, ctrl-d deletes them all
   0 / 1 / 2    all boxes / running only / paused only
   esc          back; q (on home), ctrl-c or :q quits`,
 	Args: cobra.NoArgs,
@@ -288,7 +288,7 @@ type tuiModel struct {
 	create      *tuiCreateForm
 	creating    bool
 	pending     map[string]string // box -> verb in flight
-	marked      map[string]bool   // :backups: ids marked with space, for ctrl-d
+	marked      map[string]bool   // :boxes names / :backups ids marked with space, for ctrl-d
 	spin        bspinner.Model
 	spinning    bool
 

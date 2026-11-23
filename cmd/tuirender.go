@@ -418,7 +418,7 @@ func (m tuiModel) table(w, inner int) (string, []string) {
 			cells = append(cells, padRight(c, widths[i]))
 		}
 		lead := " "
-		if t.view == backupsView && m.marked[row.key] {
+		if (t.view == backupsView || t.view == boxesView) && m.marked[row.key] {
 			lead = "*"
 		}
 		plain := lead + strings.Join(cells, "  ")
