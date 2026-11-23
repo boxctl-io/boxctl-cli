@@ -24,6 +24,10 @@ type Config struct {
 	// (BOXCTL_CLAUDE_MODEL/BOXCTL_CLAUDE_EFFORT).
 	ClaudeModel  string `json:"claude_model,omitempty"`
 	ClaudeEffort string `json:"claude_effort,omitempty"`
+	// HarnessRepo is the GitHub repository (owner/name) a harness name
+	// is fetched from, below BOXCTL_HARNESS_REPO; empty means
+	// boxctl-io/harnesses.
+	HarnessRepo string `json:"harness_repo,omitempty"`
 }
 
 func dir() (string, error) {

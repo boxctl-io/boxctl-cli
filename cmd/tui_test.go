@@ -620,6 +620,10 @@ func TestTUIRepos(t *testing.T) {
 	}
 	// g asks for a goal; an empty one is refused, a typed one runs.
 	m, _ = press(t, m, "g")
+	if m.dialog == nil || m.dialog.title != "Harness for the goal on cdalar/boxctl" {
+		t.Fatalf("g didn't ask for a harness: %+v", m.dialog)
+	}
+	m, _ = press(t, m, "enter")
 	if m.dialog == nil || m.dialog.area == nil || !strings.Contains(m.View(), "Goal for Claude on cdalar/boxctl") {
 		t.Fatalf("g didn't ask for a goal:\n%s", m.View())
 	}
@@ -629,18 +633,23 @@ func TestTUIRepos(t *testing.T) {
 	}
 	m.flash, m.flashErr = "", false
 	m, _ = press(t, m, "g")
+	m, _ = press(t, m, "enter")
 	m.dialog.area.SetValue("bump Go")
 	m, cmd = press(t, m, "enter")
 	if m.dialog != nil || cmd == nil || m.flashErr {
 		t.Errorf("goal: dialog=%v cmd=%v flash=%q", m.dialog != nil, cmd != nil, m.flash)
 	}
-	if got := strings.Join(claudeRepoArgs("cdalar/boxctl", "bump Go"), " "); got != "claude --repo cdalar/boxctl --goal bump Go" {
+	if got := strings.Join(claudeRepoArgs("cdalar/boxctl", "bump Go", ""), " "); got != "claude --repo cdalar/boxctl --goal bump Go" {
+		t.Errorf("args = %q", got)
+	}
+	if got := strings.Join(claudeRepoArgs("cdalar/boxctl", "bump Go", "visual"), " "); got != "claude --repo cdalar/boxctl --goal bump Go --harness visual" {
 		t.Errorf("args = %q", got)
 	}
 	// A goal longer than the dialog wraps onto the next line: all of
 	// it stays on screen, and no line runs past the terminal.
 	m.flash, m.flashErr = "", false
 	m, _ = press(t, m, "g")
+	m, _ = press(t, m, "enter")
 	long := "when writing a goal on the tui it should go to the next line, and nothing that I write should disappear " +
 		"on the right of the dialog however long the goal gets, ENDMARK"
 	m = typeIn(t, m, long)
@@ -990,9 +999,22 @@ func TestTUIPRs(t *testing.T) {
 			t.Errorf("view lacks %q:\n%s", want, view)
 		}
 	}
-	if got, want := strings.Join(claudePRArgs("acme/web", 7, "status?"), " "), "claude --repo acme/web --pr 7 --goal status?"; got != want {
+	if got, want := strings.Join(claudePRArgs("acme/web", 7, "status?", ""), " "), "claude --repo acme/web --pr 7 --goal status?"; got != want {
 		t.Errorf("args = %q, want %q", got, want)
 	}
+	if got, want := strings.Join(claudePRArgs("acme/web", 7, "status?", "pr-visual"), " "), "claude --repo acme/web --pr 7 --goal status? --harness pr-visual"; got != want {
+		t.Errorf("args = %q, want %q", got, want)
+	}
+	// g asks for the harness, then the goal.
+	m, _ = press(t, m, "g")
+	if m.dialog == nil || m.dialog.title != "Harness for the goal on acme/web#7" {
+		t.Fatalf("g: %+v", m.dialog)
+	}
+	m, _ = press(t, m, "enter")
+	if m.dialog == nil || m.dialog.title != "Ask Claude about acme/web#7" {
+		t.Fatalf("goal prompt: %+v", m.dialog)
+	}
+	m, _ = press(t, m, "esc")
 	m, _ = press(t, m, "enter")
 	if !strings.Contains(strings.Join(m.top().lines, "\n"), "acme/web#7") {
 		t.Errorf("describe page: %v", m.top().lines)

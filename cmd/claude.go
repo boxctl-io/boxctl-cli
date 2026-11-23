@@ -147,7 +147,7 @@ func init() {
 	claudeAgent.addFlags(claudeCmd)
 	claudeCmd.Flags().StringVar(&claudeHandoff, "handoff", "", "continue this local Claude Code session (its ID) on the box")
 	claudeCmd.Flags().StringSliceVarP(&claudeRepos, "repo", "R", nil, "GitHub repository (owner/name) to clone on a new box, on a new boxctl/... branch; repeat or comma-separate for several, cloned side by side (with --goal: default is this directory's origin)")
-	claudeCmd.Flags().StringVar(&claudeHarnessArg, "harness", "", "rules for Claude on the box: a directory (CLAUDE.md, managed-settings.json, agents/ skills/ commands/), a name under ~/.boxctl/harness, or pr-only, the built-in (pull request, never merge); none for no harness (default: ~/.boxctl/harness/default, else for --goal/--issue the built-in pr-only)")
+	claudeCmd.Flags().StringVar(&claudeHarnessArg, "harness", "", "rules for Claude on the box: a directory (CLAUDE.md, managed-settings.json, agents/ skills/ commands/), or a name[@ref]: yours under ~/.boxctl/harness, else that directory of the harness repository ("+defaultHarnessRepo+", or "+envHarnessRepo+"; e.g. pr-only: pull request, never merge); none for no harness (default: ~/.boxctl/harness/default, else for --goal/--issue pr-only)")
 	claudeCmd.Flags().StringVar(&claudeGoal, "goal", "", "a goal for Claude to carry out unattended, ending in a pull request")
 	claudeCmd.Flags().IntVar(&claudePR, "pr", 0, "work on this open pull request's branch instead of a new one (one --repo): push to it, open no new pull request -- with --goal, a follow-up such as a CI fix")
 	claudeCmd.Flags().IntVar(&claudeBacklogItem, "backlog-item", 0, "the boxctl backlog item this run is for (labels its box)")
@@ -162,9 +162,7 @@ func init() {
 }
 
 func runClaude(cmd *cobra.Command, args []string) error {
-	cleanupHarness, err := prepareHarness()
-	defer cleanupHarness()
-	if err != nil {
+	if err := prepareHarness(cmd.Context()); err != nil {
 		return err
 	}
 	if len(claudeRepos) > 0 || claudeGoal != "" || claudeIssue != 0 || claudePR != 0 {
