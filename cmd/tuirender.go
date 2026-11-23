@@ -220,15 +220,20 @@ func (m tuiModel) infoBlock() []string {
 		status = m.spin.View() + " " + refreshed
 	}
 	showing := kv("Showing", m.stateFilter.String())
-	if m.app.backlog {
+	rev := kv("Rev", Version)
+	switch {
+	case m.app.backlog && !m.atTop:
 		showing = kv("Backlog", m.backlogSummary())
+	case m.backlogOn:
+		// The backlog keeps running on the other side; say so here too.
+		rev = kv("Backlog", m.backlogSummary())
 	}
 	return []string{
 		kv("API", host),
 		kv("Boxes", boxes),
 		showing,
 		kv("Refreshed", status),
-		kv("Rev", Version),
+		rev,
 	}
 }
 
@@ -241,13 +246,17 @@ func (m tuiModel) hotkeyBlock(width int) []string {
 		v = t.view
 	}
 	keys := append([]hotkey{}, v.hotkeys...)
-	switch t.kind {
-	case pageHome:
+	switch {
+	case m.atTop:
+		keys = append([]hotkey{}, topHotkeys...)
+	case t.kind == pageHome:
 		keys = append(append([]hotkey{}, homeHotkeys...), m.app.screenHotkeys()...)
-	case pageText:
+		keys = append(keys, hotkey{"ctrl-t", strings.ToLower(m.app.other().label)})
+	case t.kind == pageText:
 		keys = []hotkey{{"j/k", "scroll"}, {"g/G", "top/bottom"}, {"y", "json"}, {"s", "shell"}, {"a", "claude"}, {"l", "logs"}}
 	default:
 		keys = append(keys, m.app.screenHotkeys()...)
+		keys = append(keys, hotkey{"ctrl-t", strings.ToLower(m.app.other().label)})
 	}
 	keys = append(keys, commonHotkeys...)
 	// Column width from the widest entry.
@@ -299,6 +308,8 @@ func (m tuiModel) boxView() string {
 	case m.create != nil:
 		title = "Create a box"
 		lines = m.create.lines(w)
+	case m.atTop:
+		title, lines = m.topView(w, inner)
 	case m.top().kind == pageText:
 		title, lines = m.textPage(w, inner)
 	case m.top().kind == pageHome:
@@ -584,6 +595,9 @@ func (m tuiModel) dialogAreaWidth() int {
 
 // pageTitle is the top page's own title, for a dialog over it.
 func (m tuiModel) pageTitle() string {
+	if m.atTop {
+		return "Home"
+	}
 	t := m.top()
 	switch t.kind {
 	case pageText:
@@ -597,8 +611,16 @@ func (m tuiModel) pageTitle() string {
 // crumbsView is the bottom line: a chip per page, the current one
 // orange, and the flash at the right.
 func (m tuiModel) crumbsView() string {
-	var chips []string
+	if m.atTop {
+		return m.withFlash(k9s.crumbActive.Render(" <home> "))
+	}
+	chips := []string{k9s.crumb.Render(" <home> ")}
 	for i, p := range m.pages {
+		// The side's home under a view of its name (boxes' under :boxes)
+		// would read <boxes> <boxes>.
+		if p.kind == pageHome && i+1 < len(m.pages) && m.pages[i+1].kind == pageTable && m.pages[i+1].view.name == p.title {
+			continue
+		}
 		name := p.title
 		if p.kind == pageTable {
 			name = p.view.name
@@ -615,7 +637,11 @@ func (m tuiModel) crumbsView() string {
 	if m.create != nil {
 		chips = append(chips, k9s.crumbActive.Render(" <create> "))
 	}
-	left := strings.Join(chips, " ")
+	return m.withFlash(strings.Join(chips, " "))
+}
+
+// withFlash puts the flash at the right of the crumbs line left.
+func (m tuiModel) withFlash(left string) string {
 	if m.flash == "" {
 		return fit(left, m.width)
 	}

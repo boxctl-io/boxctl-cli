@@ -32,11 +32,13 @@ const (
 	homeTileGap = 2
 )
 
-func homePage() page { return page{kind: pageHome, title: "home"} }
+// homePage is a side's home, crumbed with the side's name.
+func homePage(a *tuiApp) page { return page{kind: pageHome, title: strings.ToLower(a.label)} }
 
-// goHome makes home the only page.
+// goHome makes this side's home the only page.
 func (m *tuiModel) goHome() {
-	m.pages = []page{homePage()}
+	m.atTop = false
+	m.pages = []page{homePage(m.app)}
 	m.filter.SetValue("")
 }
 
@@ -205,6 +207,8 @@ func (m tuiModel) handleHomeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "R", "ctrl+r", "f5":
 		return m, m.refresh()
+	case "esc":
+		m.goTop()
 	case "q":
 		return m, tea.Quit
 	}

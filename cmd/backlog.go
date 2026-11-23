@@ -40,8 +40,8 @@ Each kind of run gets 2 attempts (boxctl backlog retry adds one); after that
 the item needs you. A run's box is deleted once the next run starts or the
 pull request is merged.
 
-The passes run while boxctl board is open (its :backlog shows the backlog)
-or boxctl backlog dispatch is, never both. Nothing moves while neither is running;
+The passes run while the tui is open once it has shown the board (boxctl
+board, or ctrl-t to it) or while boxctl backlog dispatch is, never both. Nothing moves while neither is running;
 runs already on boxes carry on.
 
   boxctl backlog add --repo owner/name "bump Go and fix what breaks"
