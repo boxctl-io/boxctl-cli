@@ -412,6 +412,9 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if t.view == urlsView {
 			return m.askUnexpose()
 		}
+		if t.view == backupsView {
+			return m.askDeleteBackup()
+		}
 		return m.askDestroy()
 	case "r":
 		if t.view == backupsView {
@@ -583,6 +586,7 @@ func (m *tuiModel) pushHelp() {
 	}
 	if v == backupsView {
 		lines = append(lines, "", "Backups",
+			"  ctrl-d deletes the backup, after asking.",
 			"  r asks for a name (the backed-up box's by default) and restores the backup as a new box,",
 			"  paused at its own size (`boxctl restore`); a size after the name boots it fresh at that size.")
 	}
@@ -829,6 +833,45 @@ func (m tuiModel) askRestore() (tea.Model, tea.Cmd) {
 		m.dialog.input.CursorEnd()
 	}
 	return m, cmd
+}
+
+// askDeleteBackup is `boxctl backups rm` for the backups view's row.
+func (m tuiModel) askDeleteBackup() (tea.Model, tea.Cmd) {
+	r := m.currentRow()
+	if r == nil {
+		return m, nil
+	}
+	var backup *client.Backup
+	for i := range m.backups {
+		if m.backups[i].ID == r.key {
+			backup = &m.backups[i]
+		}
+	}
+	if backup == nil {
+		return m, nil
+	}
+	b := *backup
+	if v, ok := m.pending[b.ID]; ok {
+		return m, m.fail("%s is being %s", b.ID, pastTense(v))
+	}
+	m.ask(fmt.Sprintf("Delete backup %s?", b.ID), []string{
+		fmt.Sprintf("%s's backup from %s ago, %s.", b.VMName, age(b.CreatedAt), client.FormatBytes(b.SizeBytes)),
+		"", "This cannot be undone.",
+	}, func(m tuiModel) (tea.Model, tea.Cmd) {
+		if v, ok := m.pending[b.ID]; ok {
+			return m, m.fail("%s is being %s", b.ID, pastTense(v))
+		}
+		m.pending[b.ID] = "delete"
+		c := m.c
+		run := func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			err := c.DeleteBackup(ctx, b.ID)
+			return tuiActionMsg{name: b.ID, verb: "delete", err: err, result: "deleted backup " + b.ID}
+		}
+		return m, tea.Batch(run, m.say("deleting backup %s…", b.ID), m.spinIfBusy())
+	})
+	return m, nil
 }
 
 // askUnexpose takes the urls view's row off the internet, after asking.

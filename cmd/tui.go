@@ -729,6 +729,8 @@ func pastTense(verb string) string {
 		return "kept"
 	case "destroy":
 		return "destroyed"
+	case "delete":
+		return "deleted"
 	}
 	return verb + "ed"
 }
