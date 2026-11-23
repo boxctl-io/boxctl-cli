@@ -63,7 +63,7 @@ func TestListHarnesses(t *testing.T) {
 	}
 	// One of your own named pr-only shadows the repository's.
 	mk("pr-only", "CLAUDE.md", "# Mine")
-	hs, err = listHarnesses(context.Background())
+	hs, _ = listHarnesses(context.Background())
 	n := 0
 	for _, h := range hs {
 		if h.Name == "pr-only" {

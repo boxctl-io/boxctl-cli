@@ -57,7 +57,7 @@ var harnessRoot = func() (string, error) {
 }
 
 // describeHarnessDir builds the entry for the harness in dir, in fsys
-// terms of plain files so the built-in (embedded) and yours share it.
+// terms of plain files so yours and the repository's share it.
 func describeHarnessDir(name, source string, fsys fs.FS) harnessEntry {
 	e := harnessEntry{Name: name, Source: source, Files: []string{}}
 	for _, f := range append(append([]string{}, harnessManaged...), harnessConfigEntries...) {
