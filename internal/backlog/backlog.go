@@ -93,6 +93,7 @@ type Item struct {
 	Goal     string `json:"goal"`
 	Priority int    `json:"priority,omitempty"`
 	Model    string `json:"model,omitempty"`
+	Harness  string `json:"harness,omitempty"` // claude --harness for its runs; empty is the default
 	State    State  `json:"state"`
 	Note     string `json:"note,omitempty"` // why it needs you, or what it's waiting for
 	Branch   string `json:"branch,omitempty"`

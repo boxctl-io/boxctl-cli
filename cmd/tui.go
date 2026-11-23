@@ -166,16 +166,17 @@ var tuiFlashFor = 5 * time.Second
 // Messages from the commands the model runs.
 type (
 	tuiListMsg struct {
-		resource string // boxes, images, sizes, backups, repos
-		vms      []client.VM
-		images   []client.Image
-		sizes    []client.Size
-		backups  []client.Backup
-		repos    []ghRepo
-		prs      []ghPR
-		prsRepo  string // the repository prs are of
-		backlog  *backlog.Backlog
-		err      error
+		resource  string // boxes, images, sizes, backups, repos, prs, harnesses
+		vms       []client.VM
+		images    []client.Image
+		sizes     []client.Size
+		backups   []client.Backup
+		repos     []ghRepo
+		prs       []ghPR
+		prsRepo   string // the repository prs are of
+		backlog   *backlog.Backlog
+		harnesses []string
+		err       error
 	}
 	tuiActionMsg struct {
 		name, verb string
@@ -251,8 +252,11 @@ type tuiDialog struct {
 	// every key and render, so a list that arrives later shows up): the
 	// ones matching the text, up/down to select, tab to complete.
 	choices func(m *tuiModel) []string
-	sel     int  // the selected match
-	picked  bool // up/down chose sel since the text last changed
+	// typed says whether text that isn't a choice is still what enter
+	// submits; nil means an owner/name (parseRepo).
+	typed  func(v string) bool
+	sel    int  // the selected match
+	picked bool // up/down chose sel since the text last changed
 }
 
 type tuiModel struct {
@@ -277,10 +281,13 @@ type tuiModel struct {
 	repos   []ghRepo // GitHub's, newest push first (tuirepos.go)
 	prs     []ghPR   // :prs: prsRepo's open pull requests (tuiprs.go)
 	prsRepo string
-	reposAt time.Time        // when repos came from GitHub, or the cache did
-	backlog *backlog.Backlog // ~/.boxctl/backlog.json (tuibacklog.go)
-	loaded  map[string]bool  // resources listed at least once
-	loading map[string]bool  // listings in flight
+	// harnesses are the names a run can pick (tuiharness.go): yours,
+	// then the harness repository's.
+	harnesses []string
+	reposAt   time.Time        // when repos came from GitHub, or the cache did
+	backlog   *backlog.Backlog // ~/.boxctl/backlog.json (tuibacklog.go)
+	loaded    map[string]bool  // resources listed at least once
+	loading   map[string]bool  // listings in flight
 
 	pages       []page // the navigation stack; the last is shown
 	stateFilter stateFilter
@@ -501,6 +508,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuiListMsg:
 		delete(m.loading, msg.resource)
+		if msg.resource == "harnesses" {
+			// Yours are listed even when the repository's couldn't be.
+			m.harnesses, m.loaded["harnesses"] = msg.harnesses, true
+			if msg.err != nil {
+				return m, m.fail("listing harnesses: %v", msg.err)
+			}
+			return m, nil
+		}
 		if msg.err != nil {
 			return m, m.fail("listing %s: %v", msg.resource, msg.err)
 		}
