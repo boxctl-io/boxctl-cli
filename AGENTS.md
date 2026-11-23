@@ -594,7 +594,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `openSession` and `startSession` are the start and end of a run. A
   second agent would be another `boxAgent` and a command binding the
   same flags (`boxAgent.addFlags`, `lsCmd`/`fetchCmd`/`pushCmd`).
-- `cmd/backups.go`/`restore.go` — `backups` (GET /api/backups) and
+- `cmd/backups.go`/`restore.go` — `backups` (GET /api/backups), `backups rm <backup>...` (DELETE /api/backups/{id}; also ctrl-d in the tui's `:backups`) and
   `restore <backup> [--name] [--size]` (POST
   /api/backups/{id}/restore, then the same import poll as `import`).
   `<backup>` is a backup id or a box name, meaning that box's newest

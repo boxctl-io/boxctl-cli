@@ -37,7 +37,7 @@ boxctl rm my-box                            # done
 | `ssh`, `ssh-proxy` | Shell or one-off command; real `ssh`/`scp`/`rsync` through a proxy |
 | `cp` | Copy a file or directory (`-r`) between a box and this machine, any size |
 | `port-forward`, `expose`, `unexpose` | Reach a box port locally, or publish it on the internet |
-| `backups`, `restore` | Saved copies of paused boxes |
+| `backups` (`backups rm`), `restore` | Saved copies of paused boxes; `backups rm` deletes them |
 | `claude` | Run a coding agent on a box with your project |
 | `backlog` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:backlog` in the board) |
 | `runs` | Every run of every backlog item, going and ended (`:runs` in the board) |

@@ -875,6 +875,11 @@ func (c *Client) ListBackups(ctx context.Context) ([]Backup, error) {
 	return backups, nil
 }
 
+// DeleteBackup deletes the backup backupID for good.
+func (c *Client) DeleteBackup(ctx context.Context, backupID string) error {
+	return c.do(ctx, http.MethodDelete, "/api/backups/"+url.PathEscape(backupID), nil, nil)
+}
+
 // Restore rebuilds backupID as a new box named name and waits for it. An
 // empty size keeps the one the box was backed up at, and it comes back
 // paused; with another size the server boots it fresh from the backup's
