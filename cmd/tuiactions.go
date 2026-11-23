@@ -383,7 +383,7 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pushHelp()
 		return m, nil
 	case " ":
-		if t.view == backupsView {
+		if t.view == backupsView || t.view == boxesView {
 			if r := m.currentRow(); r != nil {
 				if m.marked[r.key] {
 					delete(m.marked, r.key)
@@ -396,7 +396,7 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "esc":
 		switch {
-		case t.view == backupsView && len(m.marked) > 0:
+		case (t.view == backupsView || t.view == boxesView) && len(m.marked) > 0:
 			clear(m.marked)
 		case m.filter.Value() != "":
 			m.filter.SetValue("")
@@ -464,6 +464,9 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if t.view == backupsView {
 			return m.askDeleteBackup()
+		}
+		if t.view == boxesView && len(m.marked) > 0 {
+			return m.askDestroyMarked()
 		}
 		return m.askDestroy()
 	case "r":
@@ -635,6 +638,10 @@ func (m *tuiModel) pushHelp() {
 	}
 	if len(sorts) > 0 {
 		lines = append(lines, "", "  sort:          "+strings.Join(sorts, ", "))
+	}
+	if v == boxesView {
+		lines = append(lines, "", "Boxes",
+			"  space marks boxes (esc clears); ctrl-d then deletes all the marked ones, after one question.")
 	}
 	if v == backupsView {
 		lines = append(lines, "", "Backups",
@@ -812,6 +819,60 @@ func (m tuiModel) askDestroy() (tea.Model, tea.Cmd) {
 		return m.act(vm, "destroy", "", func(ctx context.Context) (string, error) {
 			return "", m.c.Destroy(ctx, vm.Name)
 		})
+	})
+	return m, nil
+}
+
+// askDestroyMarked deletes every box marked with space, after one
+// question that carries askDestroy's unfinished-goal warning for the
+// marked runs. A mark whose box is gone since is dropped.
+func (m tuiModel) askDestroyMarked() (tea.Model, tea.Cmd) {
+	var names []string
+	var marked []client.VM
+	for _, vm := range m.vms {
+		if m.marked[vm.Name] {
+			names = append(names, vm.Name)
+			marked = append(marked, vm)
+		}
+	}
+	if len(names) == 0 {
+		clear(m.marked)
+		return m, nil
+	}
+	for _, n := range names {
+		if v, ok := m.pending[n]; ok {
+			return m, m.fail("%s is being %s", n, pastTense(v))
+		}
+	}
+	body := append([]string{}, names...)
+	if len(body) > 8 {
+		body = append(body[:8], fmt.Sprintf("… and %d more", len(names)-8))
+	}
+	body = append(body, "", "This cannot be undone.")
+	if un := filterUnfinished(marked, nil); len(un) > 0 {
+		var us []string
+		for _, vm := range un {
+			us = append(us, vm.Name)
+		}
+		body = append(body, fmt.Sprintf("Not done yet, their work may not be fetched: %s.", strings.Join(us, ", ")))
+	}
+	m.ask(fmt.Sprintf("Delete %d boxes?", len(names)), body, func(m tuiModel) (tea.Model, tea.Cmd) {
+		var cmds []tea.Cmd
+		for _, n := range names {
+			vm := m.box(n)
+			delete(m.marked, n)
+			if vm == nil {
+				continue
+			}
+			if _, ok := m.pending[n]; ok {
+				continue
+			}
+			_, cmd := m.act(vm, "destroy", "", func(ctx context.Context) (string, error) {
+				return "", m.c.Destroy(ctx, n)
+			})
+			cmds = append(cmds, cmd)
+		}
+		return m, tea.Batch(cmds...)
 	})
 	return m, nil
 }

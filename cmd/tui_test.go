@@ -998,3 +998,45 @@ func TestTUIPRs(t *testing.T) {
 		t.Errorf("describe page: %v", m.top().lines)
 	}
 }
+
+func TestTUIMarkAndDeleteBoxes(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	c, calls := fakeBoxServer(t, tuiFixture())
+	m := boxesTUI(c)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	m = next.(tuiModel)
+	next, _ = m.Update(m.list("boxes")())
+	m = next.(tuiModel)
+
+	first := m.currentRow().key
+	m, _ = press(t, m, " ")
+	m, _ = press(t, m, " ")
+	if len(m.marked) != 2 || !m.marked[first] {
+		t.Fatalf("marked = %v", m.marked)
+	}
+	// esc clears the marks; space again marks two.
+	m, _ = press(t, m, "esc")
+	if len(m.marked) != 0 {
+		t.Fatalf("esc left marks: %v", m.marked)
+	}
+	m, _ = press(t, m, " ")
+	m, _ = press(t, m, " ")
+	names := []string{}
+	for k := range m.marked {
+		names = append(names, k)
+	}
+	m, _ = press(t, m, "ctrl+d")
+	if m.dialog == nil || !strings.Contains(m.View(), "Delete 2 boxes?") {
+		t.Fatalf("ctrl+d with marks:\n%s", m.View())
+	}
+	m, cmd := press(t, m, "y")
+	runCmd(cmd)
+	for _, n := range names {
+		if m.pending[n] != "destroy" {
+			t.Errorf("%s not being destroyed: %v", n, m.pending)
+		}
+	}
+	if len(m.marked) != 0 || len(*calls) != 2 {
+		t.Errorf("marked=%v calls=%v", m.marked, *calls)
+	}
+}
