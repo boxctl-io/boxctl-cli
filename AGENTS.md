@@ -537,6 +537,12 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `:backlog`'s and `:runs`' `L` sets the slot limit (`backlog limit`'s
   `setBacklogLimits`): `3` for runs at once in all, `3 2` for per
   repository too (`parseBacklogLimit`).
+  `:backlog`'s `c` (and `backlog change`) is `backlog.RequestChange`:
+  your text goes in `Item.Change`, and `react` turns it into a `change`
+  run on the PR's branch ahead of any CI or conflict fix. The launch moves
+  it to that run's `Ask`; a failed or lost run puts it back. A request gets
+  `Budget` failed runs (counted from `Item.Asked`, so asking again starts
+  afresh); `retry` adds one.
   `:backlog`'s `o` is `cmd/prtab.go`'s `openPR`: on a Mac with Chrome
   running, an AppleScript loads the PR into the one tab it used last
   (its Chrome id in `~/.boxctl/pr-tab`, reused only while still on
