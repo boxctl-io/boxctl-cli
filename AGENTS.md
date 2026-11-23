@@ -577,15 +577,27 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `~/.claude`, and the harness's `commands/` etc. must win. Claude is root
   on the box, so this is a guardrail, not a boundary. Which harness:
   `--harness none`, an explicit one, `~/.boxctl/harness/default`, or for
-  an unattended run (`--goal`/`--issue`) the embedded `cmd/harness-pr-only`
-  (`builtinHarness`: extracted to a temp dir, which the func
-  `prepareHarness` returns removes; `harness.dir` stays that temp
-  directory and only `harness.label` says "built-in pr-only" -- `apply`
-  tars from `dir`). `--harness pr-only` names that
-  built-in too, unless `~/.boxctl/harness/pr-only` exists -- yours wins.
-  A harness with only a `model.json` (`!harness.rules()`) never replaces
-  an unattended run's rules: `withRules` loads the built-in in its place
+  an unattended run (`--goal`/`--issue`) `pr-only`, by name. A name
+  (`resolveHarness`) is a path if one exists, else `name[@ref]`: without a
+  ref yours under `~/.boxctl/harness` wins, else it's that top-level
+  directory of the public harness repository (`cmd/harnessremote.go`:
+  `boxctl-io/harnesses`, or `BOXCTL_HARNESS_REPO`/`harness_repo`). There is
+  no copy in the binary. `fetchHarnessRepo` asks GitHub which commit the
+  ref (`main`) is at and downloads the tarball only for a commit not in
+  `~/.boxctl/harness-cache/<owner>/<repo>/<sha>`; when GitHub can't be
+  asked it uses the commit the ref was last at (`refs/<ref>`), with a
+  warning, and with nothing cached an unattended run fails rather than run
+  without pr-only. `harness.label` names the commit. Tests point
+  `githubAPIBase`/`githubCodeloadBase` at `newFakeGitHub`; none may reach
+  GitHub. A harness with only a `model.json` (`!harness.rules()`) never
+  replaces an unattended run's rules: `withRules` loads pr-only in its place
   with its model (`harness.modelFrom` names where that came from).
+  `cmd/tuiharness.go` is the tui's picker (`askHarness`), asked before the
+  goal in `:backlog`'s and `:repos`' `a` and `:repos`' and `:prs`' `g`: choices from
+  `harnessChoices` (yours, then the repository's main), the default first
+  so enter keeps it and passes no `--harness`; a typed `name@ref` is taken
+  as typed (`tuiDialog.typed`). A backlog item keeps it in `Item.Harness`
+  and every run of it gets `--harness` (`backlog add --harness` too).
 - `cmd/claudemodel.go` — `claude --model/--effort`: passed to claude on
   the box as its own `--model`/`--effort` flags (`modelChoice.args`,
   prepended to the passthrough args: the goal runner's `claude -p` line

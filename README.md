@@ -292,7 +292,7 @@ rules for box runs only. The directory may hold:
  "allowManagedPermissionRulesOnly": true}
 ```
 
-(the built-in `pr-only`, `cmd/harness-pr-only`) with a `CLAUDE.md` saying "this is a disposable sandbox: read any
+(`pr-only` in [boxctl-io/harnesses](https://github.com/boxctl-io/harnesses)) with a `CLAUDE.md` saying "this is a disposable sandbox: read any
 directory, install any tool; work on your branch, open a pull request with
 `gh pr create`, never merge it" gives `boxctl claude --harness pr-only` a
 "PR, never merge" run. The harness is validated before any box is created
@@ -308,26 +308,38 @@ with a one-repository fine-grained token, and branch protection on
 were tried, not ways around them. (The flag itself: Claude Code refuses it
 as root unless `IS_SANDBOX=1` is set, which the goal runner does.)
 
+**Where a named harness comes from.** `--harness <name>` is
+`~/.boxctl/harness/<name>` if you have one, else the `<name>` directory of
+the public [boxctl-io/harnesses](https://github.com/boxctl-io/harnesses)
+repository's `main`; `<name>@<ref>` pins a branch, tag or commit of it
+(and skips your own). boxctl asks GitHub which commit that is on every run
+and downloads the repository only for a commit it hasn't got, into
+`~/.boxctl/harness-cache`; offline, it uses the commit it last fetched and
+says so. `BOXCTL_HARNESS_REPO` or `"harness_repo"` in
+`~/.boxctl/config.json` points it at another `owner/name` with the same
+layout. In the tui, `a` (`:backlog`, `:repos`) and `g` (`:repos`, `:prs`) ask
+for the harness before the goal; `boxctl backlog add --harness` does the
+same from the shell.
+
 **Which harness a run gets.** `--harness none` means none; `--harness
-<dir|name>` means that one (`pr-only` is the built-in, unless
-`~/.boxctl/harness/pr-only` is one of yours); otherwise `~/.boxctl/harness/default`, if it
-exists, applies to every run; otherwise a `--goal` run gets the built-in
+<dir|name[@ref]>` means that one; otherwise `~/.boxctl/harness/default`, if it
+exists, applies to every run; otherwise a `--goal` run gets
 `pr-only` (pull request, never merge) -- it runs unattended with
 `--dangerously-skip-permissions`, so it's the run that most needs a
 guardrail you didn't have to ask for. A harness that is nothing but a
 `model.json` has no rules, so it doesn't stand in for that: a `--goal` or
 `--issue` run with one (default or `--harness`) gets its model *and* the
-built-in `pr-only`, and says so. Anything chosen implicitly is
+`pr-only`, and says so. With no `pr-only` to be had (GitHub unreachable
+and nothing cached), an unattended run stops before any box is made. Anything chosen implicitly is
 announced on stderr. An attended run with no default directory gets no
 harness.
 
-`examples/harness/pr-visual` is `pr-only` plus rules for runs whose result
+`pr-visual` (in the same repository) is `pr-only` plus rules for runs whose result
 someone will check by eye: screenshots, a video or a terminal recording of
 what was built, kept on the box in `/root/evidence/`; the checks CI runs,
 before the pull request; and two kinds of memory -- notes on the box image
 that earlier runs paid for, and a rule to leave repository lessons in that
-repository's `AGENTS.md`. Copy it to `~/.boxctl/harness/` to use it; its
-README says how it's kept current.
+repository's `AGENTS.md`: `--harness pr-visual`.
 
 **Model and effort.** `--model <name>` and `--effort <level>` choose the
 model Claude runs on the box and how hard it thinks, for attached runs

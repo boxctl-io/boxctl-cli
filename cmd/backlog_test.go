@@ -53,8 +53,8 @@ func TestParsePR(t *testing.T) {
 }
 
 func TestBacklogLaunchArgs(t *testing.T) {
-	got := strings.Join(backlogLaunchArgs(backlog.Action{Repo: "o/r", Box: "q1-ci-2", Item: 1, Run: backlog.CIFix, PR: 7, Goal: "fix", Model: "opus"}), " ")
-	if got != "claude --repo o/r --box q1-ci-2 --backlog-item 1 --goal fix --pr 7 --model opus" {
+	got := strings.Join(backlogLaunchArgs(backlog.Action{Repo: "o/r", Box: "q1-ci-2", Item: 1, Run: backlog.CIFix, PR: 7, Goal: "fix", Model: "opus", Harness: "visual"}), " ")
+	if got != "claude --repo o/r --box q1-ci-2 --backlog-item 1 --goal fix --pr 7 --model opus --harness visual" {
 		t.Errorf("follow-up: %s", got)
 	}
 	if got := strings.Join(backlogLaunchArgs(backlog.Action{Repo: "o/r", Box: "q1-code-1", Item: 1, Run: backlog.Code, Goal: "g"}), " "); strings.Contains(got, "--pr") {
@@ -109,7 +109,7 @@ func TestBacklogPass(t *testing.T) {
 		return nil, nil
 	})
 	c, setVMs, calls := backlogServer(t)
-	if _, err := addBacklogItem("o/r", "fix the bug", "", 0); err != nil {
+	if _, err := addBacklogItem("o/r", "fix the bug", "", "", 0); err != nil {
 		t.Fatal(err)
 	}
 	r, err := newBacklogRunner(c)
@@ -171,7 +171,7 @@ func TestBacklogLaunchRefusedAndFailed(t *testing.T) {
 	answer := "Error: You have 2 active boxes (a, b). Delete one with `boxctl rm <box>` or keep working in an existing one.\n"
 	stubBacklog(t, func(args []string) (string, error) { return answer, errors.New("exit status 1") }, func([]string) ([]byte, error) { return nil, nil })
 	c, _, _ := backlogServer(t)
-	_, _ = addBacklogItem("o/r", "g", "", 0)
+	_, _ = addBacklogItem("o/r", "g", "", "", 0)
 	r, _ := newBacklogRunner(c)
 	if _, err := r.pass(context.Background()); err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestBacklogLaunchRefusedAndFailed(t *testing.T) {
 
 func TestBacklogCommands(t *testing.T) {
 	stubBacklog(t, nil, func(args []string) ([]byte, error) { return nil, nil })
-	it, _ := addBacklogItem("o/r", "g", "", 0)
+	it, _ := addBacklogItem("o/r", "g", "", "", 0)
 	if err := retryBacklogItem(it.ID); err == nil {
 		t.Error("retry of a queued item")
 	}
@@ -253,11 +253,20 @@ func TestTUIBacklog(t *testing.T) {
 	if m.top().view != backlogView {
 		t.Fatalf("view = %v", m.top().view.name)
 	}
-	// a: repository, then goal.
+	// a: repository, then harness, then goal.
 	m, _ = press(t, m, "a")
 	m = typeIn(t, m, "o/r")
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || !strings.Contains(m.dialog.title, "o/r") {
+	if m.dialog == nil || m.dialog.title != "Harness for the goal on o/r" {
+		t.Fatalf("harness prompt: %+v", m.dialog)
+	}
+	m.harnesses = []string{"mine", "pr-only", "visual"}
+	if got := strings.Join(m.dialog.matches(&m), " "); got != "pr-only mine visual none" {
+		t.Errorf("harness choices = %q", got)
+	}
+	m = typeIn(t, m, "vis")
+	m, _ = press(t, m, "enter")
+	if m.dialog == nil || m.dialog.title != "Add a goal on o/r (harness visual)" {
 		t.Fatalf("goal prompt: %+v", m.dialog)
 	}
 	m = typeIn(t, m, "do the thing")
@@ -268,6 +277,9 @@ func TestTUIBacklog(t *testing.T) {
 	}
 	if lines := describeBacklogItem(m.backlogItem()); !strings.Contains(strings.Join(lines, "\n"), "do the thing") {
 		t.Errorf("describe: %v", lines)
+	}
+	if it := m.backlogItem(); it.Harness != "visual" {
+		t.Errorf("harness = %q", it.Harness)
 	}
 	if !strings.Contains(m.backlogSummary(), "1 queued") {
 		t.Errorf("summary = %q", m.backlogSummary())
@@ -307,6 +319,7 @@ func TestTUIBacklog(t *testing.T) {
 	m.loaded["repos"] = true
 	m.pages = []page{{kind: pageTable, view: reposView, sortCol: -1}}
 	m, _ = press(t, m, "a")
+	m, _ = press(t, m, "enter") // the default harness
 	m = typeIn(t, m, "x")
 	m, cmd = press(t, m, "enter")
 	feed(cmd)
@@ -339,7 +352,7 @@ func TestTUIBacklogRequestChanges(t *testing.T) {
 			}
 		}
 	}
-	if _, err := addBacklogItem("o/r", "do the thing", "", 0); err != nil {
+	if _, err := addBacklogItem("o/r", "do the thing", "", "", 0); err != nil {
 		t.Fatal(err)
 	}
 	next, cmd := m.runCommand("backlog")
@@ -390,7 +403,7 @@ func TestTUIBacklogDescribeWraps(t *testing.T) {
 	m := boardTUI(c)
 	m.width, m.height = 60, 20
 	goal := strings.Repeat("make the thing better ", 30) + "THE-END"
-	if _, err := addBacklogItem("o/r", goal, "", 0); err != nil {
+	if _, err := addBacklogItem("o/r", goal, "", "", 0); err != nil {
 		t.Fatal(err)
 	}
 	q, err := loadBacklog()
@@ -476,6 +489,11 @@ func TestTUIBacklogRepoChoices(t *testing.T) {
 	m, _ = press(t, m, "up")
 	m, _ = press(t, m, "up")
 	m, _ = press(t, m, "enter")
+	if m.dialog == nil || m.dialog.title != "Harness for the goal on acme/web" {
+		t.Fatalf("harness prompt: %+v", m.dialog)
+	}
+	// Enter alone keeps the default, which the item then doesn't name.
+	m, _ = press(t, m, "enter")
 	if m.dialog == nil || m.dialog.title != "Add a goal on acme/web" {
 		t.Fatalf("goal prompt: %+v", m.dialog)
 	}
@@ -484,7 +502,10 @@ func TestTUIBacklogRepoChoices(t *testing.T) {
 	m, _ = press(t, m, "a")
 	m = typeIn(t, m, "acme/boxctl")
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.title != "Add a goal on acme/boxctl" {
+	// A typed name@ref is taken as typed too.
+	m = typeIn(t, m, "pr-only@v2")
+	m, _ = press(t, m, "enter")
+	if m.dialog == nil || m.dialog.title != "Add a goal on acme/boxctl (harness pr-only@v2)" {
 		t.Fatalf("typed: %+v", m.dialog)
 	}
 }

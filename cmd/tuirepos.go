@@ -257,7 +257,7 @@ func describeRepo(r ghRepo) []string {
 	if !r.PushedAt.IsZero() {
 		lines = append(lines, kv("Pushed", stamp(r.PushedAt)+" ("+age(r.PushedAt)+" ago)"))
 	}
-	lines = append(lines, "", "enter starts Claude on a fresh box with it cloned (`"+strings.Join(append([]string{"boxctl"}, claudeRepoArgs(r.FullName, "")...), " ")+"`);",
+	lines = append(lines, "", "enter starts Claude on a fresh box with it cloned (`"+strings.Join(append([]string{"boxctl"}, claudeRepoArgs(r.FullName, "", "")...), " ")+"`);",
 		"g asks for a goal and runs it unattended there (--goal), ending in a pull request.")
 	if !r.Permissions.Push {
 		lines = append(lines, "Without push access Claude can't push its branch or open a pull request there.")
@@ -277,10 +277,13 @@ func (m *tuiModel) repo(name string) *ghRepo {
 
 // claudeRepoArgs is the command line `enter` (or, with a goal, `g`)
 // runs for repo, less the binary.
-func claudeRepoArgs(repo, goal string) []string {
+func claudeRepoArgs(repo, goal, harness string) []string {
 	args := []string{"claude", "--repo", repo}
 	if goal != "" {
 		args = append(args, "--goal", goal)
+	}
+	if harness != "" {
+		args = append(args, "--harness", harness)
 	}
 	if apiURLFlag != "" {
 		args = append(args, "--api-url", apiURLFlag)
@@ -295,8 +298,8 @@ func claudeRepoArgs(repo, goal string) []string {
 // failed, since the tui's redraw hides what it printed. With a goal
 // the run starts Claude and returns, and nothing needs the terminal,
 // so its stdout is kept too: the "Box:" line it prints names the box.
-func (m tuiModel) claudeRepo(repo, goal string) (tea.Model, tea.Cmd) {
-	return m.claudeRun(repo, claudeRepoArgs(repo, goal), goal != "")
+func (m tuiModel) claudeRepo(repo, goal, harness string) (tea.Model, tea.Cmd) {
+	return m.claudeRun(repo, claudeRepoArgs(repo, goal, harness), goal != "")
 }
 
 // claudeRun runs boxctl with args as claudeRepo does; what names the
@@ -319,16 +322,16 @@ func (m tuiModel) claudeRun(what string, args []string, goal bool) (tea.Model, t
 }
 
 // askGoal asks what Claude should do on repo, then starts it unattended
-// there (`boxctl claude --repo <repo> --goal "..."`).
-func (m tuiModel) askGoal(repo string) (tea.Model, tea.Cmd) {
-	cmd := m.promptText("Goal for Claude on "+repo, []string{
+// there (`boxctl claude --repo <repo> --goal "..." [--harness h]`).
+func (m tuiModel) askGoal(repo, harness string) (tea.Model, tea.Cmd) {
+	cmd := m.promptText("Goal for Claude on "+repo+harnessSuffix(harness), []string{
 		"Claude works on it unattended on a new box (boxctl claude --goal) and opens a pull request.",
 		"boxctl ls, :boxes' RUN column and l on the box follow it.",
 	}, "what to do, e.g. bump Go and fix what breaks", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		if value == "" {
 			return m, m.fail("a goal is needed")
 		}
-		return m.claudeRepo(repo, value)
+		return m.claudeRepo(repo, value, harness)
 	})
 	return m, cmd
 }

@@ -66,6 +66,7 @@ var (
 	backlogRepo     string
 	backlogPriority int
 	backlogModel    string
+	backlogHarness  string
 	backlogMethod   string
 	backlogGlobal   int
 	backlogPerRepo  int
@@ -102,7 +103,7 @@ var backlogAddCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		it, err := addBacklogItem(owner+"/"+name, goal, backlogModel, backlogPriority)
+		it, err := addBacklogItem(owner+"/"+name, goal, backlogModel, backlogHarness, backlogPriority)
 		if err != nil {
 			return err
 		}
@@ -275,6 +276,7 @@ func init() {
 	backlogAddCmd.Flags().StringVarP(&backlogRepo, "repo", "R", "", "GitHub repository (owner/name; default: this directory's origin)")
 	backlogAddCmd.Flags().IntVarP(&backlogPriority, "priority", "p", 0, "higher starts first")
 	backlogAddCmd.Flags().StringVar(&backlogModel, "model", "", "model for its runs (claude --model)")
+	backlogAddCmd.Flags().StringVar(&backlogHarness, "harness", "", "harness for its runs (claude --harness: a directory, a name[@ref], or none; default pr-only)")
 	backlogMergeCmd.Flags().StringVar(&backlogMethod, "method", "squash", "merge, squash or rebase")
 	backlogLimitCmd.Flags().IntVar(&backlogGlobal, "global", 0, "runs at once in all")
 	backlogLimitCmd.Flags().IntVar(&backlogPerRepo, "per-repo", 0, "runs at once on one repository")
@@ -300,10 +302,11 @@ func backlogID(s string) (int, error) {
 	return id, nil
 }
 
-func addBacklogItem(repo, goal, model string, priority int) (*backlog.Item, error) {
+func addBacklogItem(repo, goal, model, harness string, priority int) (*backlog.Item, error) {
 	var it *backlog.Item
 	err := backlog.Update(mustBacklogPath(), func(q *backlog.Backlog) error {
 		it = q.Add(repo, goal, model, priority, time.Now())
+		it.Harness = harness
 		return nil
 	})
 	return it, err

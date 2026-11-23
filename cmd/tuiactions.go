@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -269,7 +270,16 @@ func (d *tuiDialog) value(m *tuiModel) string {
 	if d.picked {
 		return sel
 	}
-	if _, _, err := parseRepo(v); err != nil || v == "" {
+	if v == "" {
+		return sel
+	}
+	if d.typed != nil {
+		if d.typed(v) || slices.Contains(matches, v) {
+			return v
+		}
+		return sel
+	}
+	if _, _, err := parseRepo(v); err != nil {
 		return sel
 	}
 	return v
@@ -349,7 +359,10 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if t.view == reposView && key == "a" {
 		if r := m.currentRow(); r != nil {
-			return m.askBacklogGoal(r.key)
+			repo := r.key
+			return m.askHarness(repo, func(m tuiModel, harness string) (tea.Model, tea.Cmd) {
+				return m.askBacklogGoal(repo, harness)
+			})
 		}
 		return m, nil
 	}
@@ -440,7 +453,7 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if t.view == reposView {
 			if r := m.currentRow(); r != nil {
-				return m.claudeRepo(r.key, "")
+				return m.claudeRepo(r.key, "", "")
 			}
 			return m, nil
 		}
@@ -448,7 +461,10 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g":
 		if t.view == reposView {
 			if r := m.currentRow(); r != nil {
-				return m.askGoal(r.key)
+				repo := r.key
+				return m.askHarness(repo, func(m tuiModel, harness string) (tea.Model, tea.Cmd) {
+					return m.askGoal(repo, harness)
+				})
 			}
 			return m, nil
 		}

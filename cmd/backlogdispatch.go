@@ -223,6 +223,9 @@ func backlogLaunchArgs(a backlog.Action) []string {
 	if a.Model != "" {
 		args = append(args, "--model", a.Model)
 	}
+	if a.Harness != "" {
+		args = append(args, "--harness", a.Harness)
+	}
 	if apiURLFlag != "" {
 		args = append(args, "--api-url", apiURLFlag)
 	}
