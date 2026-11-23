@@ -159,7 +159,11 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   view shows the cache at once and asks GitHub in the background only
   when it's over an hour old (`repoCacheMaxAge`), R always asks, and
   the view is `onDemand` so the 5s tick never does (`listRepos`, not
-  `list`, is where that lives). `tuihome.go` is the page the tui starts
+  `list`, is where that lives). `cmd/tuiprs.go` is `:prs`, a board view of one repository's open
+  pull requests (`gh pr list`, on demand like `:repos`): the cwd's GitHub origin,
+  `:prs owner/name`, or `p` on a repo in `:repos`; `g` runs `boxctl claude
+  --repo R --pr N --goal ...` on the PR's branch, `o` opens it. It has no
+  one-key screen (`p` is pause in `:runs`). `tuihome.go` is the page the tui starts
   on (`pageHome`, always the bottom of the stack: `openView` puts a view
   on top of it, so esc from a view goes home, as does `:home`): a tile
   per view (the app's `tiles`: blurb, one-key switch, a live count from

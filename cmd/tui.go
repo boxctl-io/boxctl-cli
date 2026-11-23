@@ -46,7 +46,7 @@ esc from a view comes back to it, and esc there goes up to the split
 
   :boxes :urls :images :sizes :backups   switch view (also :home, :board, :q, :help, :create, :ssh <box>)
   b / u        :boxes / :urls with one key
-  ctrl-t       switch to the board (also :backlog, :runs, :repos)
+  ctrl-t       switch to the board (also :backlog, :runs, :repos, :prs)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
   enter, d     describe the box; y its JSON; l a --goal run's log
@@ -172,6 +172,8 @@ type (
 		sizes    []client.Size
 		backups  []client.Backup
 		repos    []ghRepo
+		prs      []ghPR
+		prsRepo  string // the repository prs are of
 		backlog  *backlog.Backlog
 		err      error
 	}
@@ -272,7 +274,9 @@ type tuiModel struct {
 	images  []client.Image
 	sizes   []client.Size
 	backups []client.Backup
-	repos   []ghRepo         // GitHub's, newest push first (tuirepos.go)
+	repos   []ghRepo // GitHub's, newest push first (tuirepos.go)
+	prs     []ghPR   // :prs: prsRepo's open pull requests (tuiprs.go)
+	prsRepo string
 	reposAt time.Time        // when repos came from GitHub, or the cache did
 	backlog *backlog.Backlog // ~/.boxctl/backlog.json (tuibacklog.go)
 	loaded  map[string]bool  // resources listed at least once
@@ -375,6 +379,9 @@ func (m *tuiModel) pop() {
 func (m *tuiModel) list(resource string) tea.Cmd {
 	if resource == "repos" {
 		return m.listRepos(false)
+	}
+	if resource == "prs" {
+		return m.listPRs()
 	}
 	if resource == "backlog" {
 		return loadBacklogMsg
@@ -512,6 +519,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "repos":
 			m.repos = msg.repos
 			m.reposAt = time.Now()
+		case "prs":
+			if msg.prsRepo == m.prsRepo {
+				m.prs = msg.prs
+			}
 		case "backlog":
 			m.backlog = msg.backlog
 		}
