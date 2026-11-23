@@ -157,14 +157,20 @@ func Decide(q *Backlog, o Obs) []Action {
 		// The last run's work is on GitHub; its box has nothing more to give.
 		acts = append(acts, removeBoxes(it, o, "")...)
 		box := boxName(it, w.kind, o.Boxes)
-		it.Runs = append(it.Runs, Run{Kind: w.kind, Box: box, Started: now})
+		goal := GoalFor(it, w.kind, w.pr)
+		run := Run{Kind: w.kind, Box: box, Started: now}
+		if w.kind == Change {
+			// The run takes the request on; asking again now is for the next one.
+			run.Ask, it.Change = it.Change, ""
+		}
+		it.Runs = append(it.Runs, run)
 		if it.State == Queued {
 			setState(it, Active, "", now)
 		}
 		setNote(it, "starting "+string(w.kind)+" run on "+box, now)
 		active++
 		perRepo[it.Repo]++
-		acts = append(acts, Action{Kind: Launch, Item: it.ID, Repo: it.Repo, Box: box, Run: w.kind, PR: it.PR, Goal: GoalFor(it, w.kind, w.pr), Model: it.Model})
+		acts = append(acts, Action{Kind: Launch, Item: it.ID, Repo: it.Repo, Box: box, Run: w.kind, PR: it.PR, Goal: goal, Model: it.Model})
 	}
 	return acts
 }
@@ -177,6 +183,10 @@ func followRun(it *Item, r *Run, o Obs) []Action {
 		t := now
 		r.Ended, r.Outcome, r.Error = &t, outcome, why
 		it.Updated = now
+		if r.Kind == Change && r.Ask != "" && (outcome == OutcomeFailed || outcome == OutcomeLost) {
+			// Not made: asked for again, ahead of anything asked since.
+			it.Change = strings.TrimSpace(r.Ask + "\n\n" + it.Change)
+		}
 	}
 	if ok && b.Status != "" {
 		// The box reports the run, so Claude started on it: whatever
@@ -269,6 +279,17 @@ func react(it *Item, o Obs) (Kind, *PR, []Action) {
 		setState(it, Done, "merged", now)
 	case pr.State == "CLOSED":
 		setState(it, NeedsYou, fmt.Sprintf("#%d was closed without merging", it.PR), now)
+	case it.Change != "":
+		// Asked for by you: before what the PR's state would start. One
+		// request gets Budget failed runs; a retry adds one.
+		switch {
+		case it.lostStreak() >= MaxLost:
+			setState(it, NeedsYou, fmt.Sprintf("changes requested, and %d runs in a row were lost", MaxLost), now)
+		case it.changeFailures() >= it.Budget():
+			setState(it, NeedsYou, fmt.Sprintf("the requested changes failed %d times: %s", it.changeFailures(), orNone(it.Last().Error)), now)
+		default:
+			return Change, pr, nil
+		}
 	case pr.Mergeable == "CONFLICTING":
 		return followUp(ConflictFix, "conflicts with "+pr.Base)
 	case pr.Checks == "failure" && len(pr.FailedRunIDs) > 0 && !slices.Contains(it.Reruns, pr.Head):
@@ -313,7 +334,7 @@ func removeBoxes(it *Item, o Obs, keep string) []Action {
 // boxName is a new run's box: q<item>-<kind>-<n>, with a letter added
 // while that's taken.
 func boxName(it *Item, kind Kind, boxes map[string]Box) string {
-	short := map[Kind]string{Code: "code", CIFix: "ci", ConflictFix: "merge"}[kind]
+	short := map[Kind]string{Code: "code", CIFix: "ci", ConflictFix: "merge", Change: "change"}[kind]
 	base := fmt.Sprintf("q%d-%s-%d", it.ID, short, len(it.Runs)+1)
 	name := base
 	for i := 0; ; i++ {
@@ -383,6 +404,16 @@ The pull request's goal, for context:
 			base = pr.Base
 		}
 		return "Pull request #" + n + " conflicts with " + base + `. Merge origin/` + base + ` into this branch (git merge origin/` + base + ` -- not a rebase), resolve the conflicts keeping what both sides meant, run the tests, and push.
+
+The pull request's goal, for context:
+
+` + it.Goal
+	case Change:
+		return "Changes were requested on pull request #" + n + `:
+
+` + it.Change + `
+
+Make them on this branch, run the tests, and push. Read the pull request's review comments too (gh pr view ` + n + ` --comments) if they help you understand what's asked.
 
 The pull request's goal, for context:
 

@@ -33,6 +33,8 @@ unattended boxctl claude --goal run on a box of its own, a few at a time
   - It conflicts with its base: a follow-up run merges the base in.
   - It's behind its base: GitHub is asked to update the branch, and it's
     ready again only once CI passes on that.
+  - You ask for changes (boxctl backlog change, or c in boxctl board):
+    a follow-up run makes them on the pull request's branch.
   - Green and up to date: "ready to merge" -- boxctl backlog merge, or m in
     boxctl board. Nothing is merged without you.
 
@@ -198,6 +200,34 @@ var backlogCancelCmd = &cobra.Command{
 	},
 }
 
+var backlogChangeCmd = &cobra.Command{
+	Use:   "change <id> <what to change|->",
+	Short: "Ask for changes to an item's pull request (- reads them from stdin)",
+	Long: `Asks for changes to an item's pull request: a follow-up run (claude
+--pr) makes them on its branch, pushes, and comments on the pull request,
+once no other run of the item is going. Asking again before that run
+starts adds to what it's told. An item that needs you becomes active
+again.`,
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id, err := backlogID(args[0])
+		if err != nil {
+			return err
+		}
+		text := args[1]
+		if text == "-" {
+			if text, err = readAllLimited(os.Stdin, 1<<20); err != nil {
+				return err
+			}
+		}
+		if err := requestBacklogChange(id, text); err != nil {
+			return err
+		}
+		fmt.Printf("Asked for changes on #%d; the next pass starts a run for them.\n", id)
+		return nil
+	},
+}
+
 var backlogRetryCmd = &cobra.Command{
 	Use:   "retry <id>",
 	Short: "Give an item that needs you one more run of each kind",
@@ -248,7 +278,7 @@ func init() {
 	backlogMergeCmd.Flags().StringVar(&backlogMethod, "method", "squash", "merge, squash or rebase")
 	backlogLimitCmd.Flags().IntVar(&backlogGlobal, "global", 0, "runs at once in all")
 	backlogLimitCmd.Flags().IntVar(&backlogPerRepo, "per-repo", 0, "runs at once on one repository")
-	backlogCmd.AddCommand(backlogLsCmd, backlogAddCmd, backlogDispatchCmd, backlogMergeCmd, backlogCancelCmd, backlogRetryCmd, backlogLimitCmd)
+	backlogCmd.AddCommand(backlogLsCmd, backlogAddCmd, backlogDispatchCmd, backlogMergeCmd, backlogCancelCmd, backlogChangeCmd, backlogRetryCmd, backlogLimitCmd)
 	rootCmd.AddCommand(backlogCmd)
 }
 
@@ -338,6 +368,12 @@ func markBacklogMerged(id int) error {
 		}
 		it.State, it.Note, it.ReadySHA = backlog.Done, "merged", ""
 		return nil
+	})
+}
+
+func requestBacklogChange(id int, text string) error {
+	return changeBacklogItem(id, func(it *backlog.Item) error {
+		return backlog.RequestChange(it, text, time.Now())
 	})
 }
 

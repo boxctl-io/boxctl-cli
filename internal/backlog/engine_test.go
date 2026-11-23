@@ -436,3 +436,75 @@ func TestKillLinksTheBoxsPR(t *testing.T) {
 		t.Errorf("PR %d, branch %q", it.PR, it.Branch)
 	}
 }
+
+func TestRequestChange(t *testing.T) {
+	q := newQ(1)
+	it := q.Items[0]
+	if err := RequestChange(it, "x", t0); err == nil || !strings.Contains(err.Error(), "no pull request") {
+		t.Errorf("no PR: %v", err)
+	}
+	q, it, boxes := withPR(t)
+	if err := RequestChange(it, "  ", t0); err == nil {
+		t.Error("empty request taken")
+	}
+	ready := &PR{State: "OPEN", Mergeable: "MERGEABLE", Head: "h1", Base: "main", Checks: "success"}
+	now := t0.Add(time.Hour)
+	Decide(q, Obs{Now: now, Boxes: boxes, PRs: map[int]*PR{1: ready}})
+	if it.ReadySHA != "h1" {
+		t.Fatalf("not ready: %q", it.Note)
+	}
+	// A request on an item that needs you makes it active again, and
+	// isn't ready to merge any more.
+	it.State = NeedsYou
+	if err := RequestChange(it, "rename foo", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := RequestChange(it, "and add a test", now); err != nil {
+		t.Fatal(err)
+	}
+	if it.State != Active || it.ReadySHA != "" {
+		t.Fatalf("after request: %s %q", it.State, it.ReadySHA)
+	}
+	// It goes ahead of a conflict fix, on the PR's branch, told both requests.
+	conflict := &PR{State: "OPEN", Mergeable: "CONFLICTING", Head: "h1", Base: "main"}
+	acts := Decide(q, Obs{Now: now, Boxes: boxes, PRs: map[int]*PR{1: conflict}})
+	l := acts[len(acts)-1]
+	if l.Kind != Launch || l.Run != Change || l.Box != "q1-change-2" || l.PR != 7 || !strings.Contains(l.Goal, "rename foo\n\nand add a test") || !strings.Contains(l.Goal, "goal a") {
+		t.Fatalf("launch: %v %+v", kinds(acts), l)
+	}
+	if it.Change != "" || it.Current().Ask != "rename foo\n\nand add a test" {
+		t.Fatalf("taken on: %q %q", it.Change, it.Current().Ask)
+	}
+	// Asked again while it runs: waits for the next run.
+	later := now.Add(time.Minute)
+	if err := RequestChange(it, "one more", later); err != nil || !strings.Contains(it.Note, "after the change run") {
+		t.Fatalf("while running: %v %q", err, it.Note)
+	}
+	// It fails: asked for again, ahead of the newer request, and a new run
+	// starts. Asking again was a new request, so that failure isn't
+	// charged to it: two more failures are out of budget.
+	boxes["q1-change-2"] = Box{State: "running", Status: "failed", Error: "boom"}
+	Decide(q, Obs{Now: later, Boxes: boxes, PRs: map[int]*PR{1: ready}})
+	if r := it.Runs[1]; r.Outcome != OutcomeFailed || it.Current() == nil || it.Current().Ask != "rename foo\n\nand add a test\n\none more" {
+		t.Fatalf("after failure: %+v %+v", r, it.Current())
+	}
+	for i := 0; i < 2; i++ {
+		if it.Current() == nil {
+			t.Fatalf("run %d didn't start: %s %q", i, it.State, it.Note)
+		}
+		boxes[it.Current().Box] = Box{State: "running", Status: "failed", Error: "boom"}
+		Decide(q, Obs{Now: later, Boxes: boxes, PRs: map[int]*PR{1: ready}})
+	}
+	if it.State != NeedsYou || !strings.Contains(it.Note, "failed 2 times") || it.Change == "" {
+		t.Fatalf("out of budget: %s %q %q", it.State, it.Note, it.Change)
+	}
+	// A run that's done clears it; the PR is watched as before.
+	q, it, boxes = withPR(t)
+	_ = RequestChange(it, "x", now)
+	Decide(q, Obs{Now: now, Boxes: boxes, PRs: map[int]*PR{1: ready}})
+	boxes[it.Current().Box] = Box{State: "running", Status: "done"}
+	Decide(q, Obs{Now: now.Add(time.Hour), Boxes: boxes, PRs: map[int]*PR{1: ready}})
+	if it.Current() != nil || it.Change != "" || it.ReadySHA != "h1" {
+		t.Errorf("done: %+v %q %q", it.Current(), it.Change, it.Note)
+	}
+}

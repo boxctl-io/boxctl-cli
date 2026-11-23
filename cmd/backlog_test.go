@@ -314,6 +314,60 @@ func TestTUIBacklog(t *testing.T) {
 	}
 }
 
+// c asks what to change on the item's pull request and records it for a
+// follow-up run; without a pull request it only says so.
+func TestTUIBacklogRequestChanges(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
+	tuiFlashFor = time.Millisecond
+	c, _ := fakeBoxServer(t, tuiFixture())
+	m := boardTUI(c)
+	feed := func(cmd tea.Cmd) {
+		for _, msg := range runCmd(cmd) {
+			if msg == nil {
+				continue
+			}
+			next, more := m.Update(msg)
+			m = next.(tuiModel)
+			if _, ok := msg.(tuiBacklogDoneMsg); ok {
+				for _, msg := range runCmd(more) {
+					if lm, ok := msg.(tuiListMsg); ok {
+						next, _ := m.Update(lm)
+						m = next.(tuiModel)
+					}
+				}
+			}
+		}
+	}
+	if _, err := addBacklogItem("o/r", "do the thing", "", 0); err != nil {
+		t.Fatal(err)
+	}
+	next, cmd := m.runCommand("backlog")
+	m = next.(tuiModel)
+	feed(cmd)
+	if m2, _ := press(t, m, "c"); m2.dialog != nil || !strings.Contains(m2.flash, "no pull request") {
+		t.Fatalf("no PR: %q", m2.flash)
+	}
+	_ = changeBacklogItem(1, func(it *backlog.Item) error {
+		it.State, it.PR, it.ReadySHA, it.Note = backlog.NeedsYou, 7, "abc", "x"
+		return nil
+	})
+	feed(loadBacklogMsg)
+	m, _ = press(t, m, "c")
+	if m.dialog == nil || !strings.Contains(m.dialog.title, "o/r#7") {
+		t.Fatalf("prompt: %+v", m.dialog)
+	}
+	m = typeIn(t, m, "rename it")
+	m, cmd = press(t, m, "enter")
+	feed(cmd)
+	it := m.backlog.Item(1)
+	if it.Change != "rename it" || it.State != backlog.Active || it.ReadySHA != "" {
+		t.Errorf("after c: %q %s %q", it.Change, it.State, it.ReadySHA)
+	}
+	if lines := strings.Join(describeBacklogItem(it), "\n"); !strings.Contains(lines, "Changes requested") || !strings.Contains(lines, "rename it") {
+		t.Errorf("describe: %s", lines)
+	}
+}
+
 // A pass asked for while one is going runs as soon as that one ends: the
 // one going may have read GitHub before the change that asked.
 func TestTUIBacklogPassAgain(t *testing.T) {

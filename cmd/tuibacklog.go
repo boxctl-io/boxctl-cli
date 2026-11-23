@@ -36,7 +36,7 @@ var backlogView = &tableView{
 	columns:  []column{{"ID", 'I'}, {"PRI", 'P'}, {"REPO", 'R'}, {"STATE", 'S'}, {"RUN", 0}, {"PR", 0}, {"NOTE", 'N'}, {"GOAL", 'G'}},
 	stateCol: 3,
 	empty:    "Nothing queued: a queues a goal (here, or on a repository in :repos).",
-	hotkeys: []hotkey{{"a", "add a goal"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"L", "slot limit"}, {"o", "open PR"},
+	hotkeys: []hotkey{{"a", "add a goal"}, {"c", "request changes"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"L", "slot limit"}, {"o", "open PR"},
 		{"l", "run's log"}, {"s", "run's shell"}, {"ctrl-d", "cancel"}, {"enter", "runs"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		if m.backlog == nil {
@@ -179,7 +179,7 @@ func (m tuiModel) handleBacklogKey(key string) (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 	if it == nil {
-		return m, nil, key == "m" || key == "r" || key == "+" || key == "-" || key == "o" || key == "l" || key == "s" || key == "ctrl+d"
+		return m, nil, key == "c" || key == "m" || key == "r" || key == "+" || key == "-" || key == "o" || key == "l" || key == "s" || key == "ctrl+d"
 	}
 	id := it.ID
 	switch key {
@@ -206,6 +206,15 @@ func (m tuiModel) handleBacklogKey(key string) (tea.Model, tea.Cmd, bool) {
 			}))
 		})
 		return m, nil, true
+	case "c":
+		if it.PR == 0 {
+			return m, m.fail("#%d has no pull request yet", id), true
+		}
+		if it.State == backlog.Done || it.State == backlog.Cancelled {
+			return m, m.fail("#%d is %s", id, backlogStateText(it.State)), true
+		}
+		md, cmd := m.askBacklogChange(it)
+		return md, cmd, true
 	case "r":
 		return m, m.backlogChange(fmt.Sprintf("#%d is active again", id), func() error { return retryBacklogItem(id) }), true
 	case "+", "-":
@@ -365,6 +374,28 @@ func (m tuiModel) askBacklogGoal(repo string) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// askBacklogChange asks what to change on it's pull request, for a
+// follow-up run on its branch.
+func (m tuiModel) askBacklogChange(it *backlog.Item) (tea.Model, tea.Cmd) {
+	id, pr := it.ID, it.PR
+	body := []string{
+		"A follow-up run makes them on the pull request's branch, pushes, and comments on it,",
+		"once no other run of this item is going. Review comments on the PR are read too.",
+	}
+	if it.Change != "" {
+		body = append(body, "Already asked, not started yet: "+firstLine(it.Change))
+	}
+	cmd := m.promptText(fmt.Sprintf("Request changes on %s#%d", it.Repo, pr), body,
+		"what to change, e.g. rename the flag to --foo and add a test", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
+			if strings.TrimSpace(value) == "" {
+				return m, m.fail("say what to change")
+			}
+			m.setBacklogNote(id, "changes requested")
+			return m, m.backlogChange(fmt.Sprintf("asked for changes on #%d", id), func() error { return requestBacklogChange(id, value) })
+		})
+	return m, cmd
+}
+
 // describeBacklogItem is :backlog's describe page.
 func describeBacklogItem(it *backlog.Item) []string {
 	kv := func(k, v string) string { return fmt.Sprintf("%-12s%s", k+":", v) }
@@ -377,6 +408,12 @@ func describeBacklogItem(it *backlog.Item) []string {
 		kv("Branch", orDash(it.Branch)),
 		kv("PR", backlogPRText(it)),
 		kv("Budget", fmt.Sprintf("%d runs of each kind (code %d, ci_fix %d, conflict_fix %d used)", it.Budget(), it.Used(backlog.Code), it.Used(backlog.CIFix), it.Used(backlog.ConflictFix))),
+	}
+	if it.Change != "" {
+		lines = append(lines, "", "Changes requested (no run yet)")
+		for _, l := range strings.Split(it.Change, "\n") {
+			lines = append(lines, "  "+l)
+		}
 	}
 	if it.Model != "" {
 		lines = append(lines, kv("Model", it.Model))
@@ -394,6 +431,9 @@ func describeBacklogItem(it *backlog.Item) []string {
 			}
 		}
 		lines = append(lines, fmt.Sprintf("  %d. %-12s %-18s %s  %s", i+1, r.Kind, r.Box, stamp(r.Started), outcome))
+		if r.Ask != "" {
+			lines = append(lines, "     asked: "+firstLine(r.Ask))
+		}
 	}
 	lines = append(lines, "", "Goal")
 	for _, l := range strings.Split(strings.TrimSpace(it.Goal), "\n") {

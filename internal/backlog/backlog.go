@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -34,6 +35,7 @@ const (
 	Code        Kind = "code"         // the first attempt, and retries of it: a new branch, ending in a PR
 	CIFix       Kind = "ci_fix"       // on the PR's branch: make its checks pass
 	ConflictFix Kind = "conflict_fix" // on the PR's branch: merge its base in and resolve
+	Change      Kind = "change"       // on the PR's branch: make the changes you asked for (RequestChange)
 )
 
 // State is an item's.
@@ -81,6 +83,7 @@ type Run struct {
 	Ended    *time.Time `json:"ended,omitempty"`
 	Outcome  string     `json:"outcome,omitempty"`
 	Error    string     `json:"error,omitempty"`
+	Ask      string     `json:"ask,omitempty"` // a Change run's: the changes it was asked for
 }
 
 // Item is one goal: one repository, one pull request in the end.
@@ -98,11 +101,15 @@ type Item struct {
 	Extra    int    `json:"extra_budget,omitempty"` // added to DefaultBudget for each kind by retry
 	// Reruns are the head commits whose failed jobs were re-run once;
 	// Updates those GitHub was asked to bring up to date with the base.
-	Reruns   []string  `json:"reruns,omitempty"`
-	Updates  []string  `json:"updates,omitempty"`
-	ReadySHA string    `json:"ready_sha,omitempty"` // the head CI passed on, up to date: merge at this
-	Created  time.Time `json:"created"`
-	Updated  time.Time `json:"updated"`
+	Reruns   []string `json:"reruns,omitempty"`
+	Updates  []string `json:"updates,omitempty"`
+	ReadySHA string   `json:"ready_sha,omitempty"` // the head CI passed on, up to date: merge at this
+	// Change is the changes you asked for on the PR (RequestChange) that
+	// no run has taken on yet; Asked is when you last asked.
+	Change  string    `json:"change,omitempty"`
+	Asked   time.Time `json:"asked,omitempty"`
+	Created time.Time `json:"created"`
+	Updated time.Time `json:"updated"`
 }
 
 // Current is the item's run that hasn't ended, nil when there's none.
@@ -153,6 +160,44 @@ func Kill(it *Item, box string, seen Box, now time.Time) error {
 	r.Ended, r.Outcome = &now, OutcomeKilled
 	setState(it, NeedsYou, fmt.Sprintf("run killed (%s on %s)", r.Kind, box), now)
 	return nil
+}
+
+// RequestChange asks for changes to the item's pull request: a Change
+// run on its branch makes them once no other run is going. Asking again
+// before that run starts adds to what it's told. An item that needs you
+// becomes active again: asking is your decision.
+func RequestChange(it *Item, text string, now time.Time) error {
+	text = strings.TrimSpace(text)
+	switch {
+	case text == "":
+		return errors.New("an empty change request")
+	case it.State == Done || it.State == Cancelled:
+		return fmt.Errorf("#%d is %s", it.ID, it.State)
+	case it.PR == 0:
+		return fmt.Errorf("#%d has no pull request yet", it.ID)
+	}
+	if it.Change != "" {
+		text = it.Change + "\n\n" + text
+	}
+	it.Change, it.Asked = text, now
+	note := "changes requested"
+	if r := it.Current(); r != nil {
+		note += ", after the " + string(r.Kind) + " run on " + r.Box
+	}
+	setState(it, Active, note, now)
+	it.ReadySHA = ""
+	return nil
+}
+
+// changeFailures is how many Change runs failed since you last asked.
+func (it *Item) changeFailures() int {
+	n := 0
+	for _, r := range it.Runs {
+		if r.Kind == Change && r.Ended != nil && r.Outcome == OutcomeFailed && !r.Started.Before(it.Asked) {
+			n++
+		}
+	}
+	return n
 }
 
 // Budget is how many runs of each kind it may have.
