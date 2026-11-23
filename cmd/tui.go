@@ -254,8 +254,9 @@ type tuiDialog struct {
 }
 
 type tuiModel struct {
-	c   *client.Client
-	app *tuiApp // the side shown, or last shown under the split (tuiapp.go)
+	backlogOrder int // :backlog's order: backlogNewest (default), backlogOldest, backlogPriority
+	c            *client.Client
+	app          *tuiApp // the side shown, or last shown under the split (tuiapp.go)
 
 	// atTop: the split above both sides is shown (tuitop.go), topCursor
 	// its selected side. stacks keeps the other side's pages, so ctrl-t

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -445,7 +446,6 @@ func TestTUIBacklogRepoChoices(t *testing.T) {
 	m.reposAt = time.Now()
 	m.backlog = &backlog.Backlog{Items: []*backlog.Item{{ID: 1, Repo: "o/r"}, {ID: 2, Repo: "zed/app"}}}
 	m.pages = []page{{kind: pageTable, view: backlogView, sortCol: -1}}
-	m.moveTo(true) // item 2, zed/app
 	m, _ = press(t, m, "a")
 	if m.dialog == nil {
 		t.Fatal("no dialog")
@@ -568,5 +568,32 @@ func TestBacklogCommandNames(t *testing.T) {
 	}
 	if boardApp.findView("queue") != nil || boardApp.findView("q") != nil {
 		t.Error(":queue still opens a view")
+	}
+}
+
+// TestBacklogOrdered: :backlog shows newest first by default and 1/2/3 pick
+// the order; dispatch's own order (Sorted) is untouched.
+func TestBacklogOrdered(t *testing.T) {
+	t0 := time.Now()
+	q := &backlog.Backlog{Items: []*backlog.Item{
+		{ID: 1, Created: t0, Priority: 0, State: backlog.Queued},
+		{ID: 2, Created: t0.Add(time.Hour), Priority: 0, State: backlog.Done},
+		{ID: 3, Created: t0.Add(2 * time.Hour), Priority: 5, State: backlog.Queued},
+	}}
+	ids := func(order int) string {
+		var s []string
+		for _, it := range backlogOrdered(q, order) {
+			s = append(s, strconv.Itoa(it.ID))
+		}
+		return strings.Join(s, "")
+	}
+	if got := ids(backlogNewest); got != "321" {
+		t.Errorf("newest = %s", got)
+	}
+	if got := ids(backlogOldest); got != "123" {
+		t.Errorf("oldest = %s", got)
+	}
+	if got := ids(backlogByPriority); got != "312" {
+		t.Errorf("priority = %s", got)
 	}
 }

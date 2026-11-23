@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -36,14 +37,14 @@ var backlogView = &tableView{
 	columns:  []column{{"ID", 'I'}, {"PRI", 'P'}, {"REPO", 'R'}, {"STATE", 'S'}, {"RUN", 0}, {"PR", 0}, {"NOTE", 'N'}, {"GOAL", 'G'}},
 	stateCol: 3,
 	empty:    "Nothing queued: a queues a goal (here, or on a repository in :repos).",
-	hotkeys: []hotkey{{"a", "add a goal"}, {"c", "request changes"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"L", "slot limit"}, {"o", "open PR"},
+	hotkeys: []hotkey{{"a", "add a goal"}, {"c", "request changes"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"1/2/3", "newest/oldest/priority"}, {"L", "slot limit"}, {"o", "open PR"},
 		{"l", "run's log"}, {"s", "run's shell"}, {"ctrl-d", "cancel"}, {"enter", "runs"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		if m.backlog == nil {
 			return nil
 		}
 		var rows []tableRow
-		for i, it := range m.backlog.Sorted() {
+		for i, it := range backlogOrdered(m.backlog, m.backlogOrder) {
 			rows = append(rows, tableRow{
 				key:      strconv.Itoa(it.ID),
 				state:    backlogStateText(it.State),
@@ -468,4 +469,35 @@ func (m tuiModel) backlogSummary() string {
 		s += ", boxctl refused a box"
 	}
 	return s
+}
+
+// Orders of :backlog's rows, chosen with 1/2/3. The default is newest
+// first, by creation time; a row never moves because its state changed.
+const (
+	backlogNewest     = iota // 1: creation time, newest first
+	backlogOldest            // 2: creation time, oldest first
+	backlogByPriority        // 3: dispatch order: state, priority, oldest
+)
+
+// backlogOrdered is the items in the shown order. Dispatch always uses
+// Backlog.Sorted, whatever is shown here.
+func backlogOrdered(q *backlog.Backlog, order int) []*backlog.Item {
+	if order == backlogByPriority {
+		return q.Sorted()
+	}
+	items := append([]*backlog.Item(nil), q.Items...)
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if !a.Created.Equal(b.Created) {
+			if order == backlogOldest {
+				return a.Created.Before(b.Created)
+			}
+			return a.Created.After(b.Created)
+		}
+		if order == backlogOldest {
+			return a.ID < b.ID
+		}
+		return a.ID > b.ID
+	})
+	return items
 }
