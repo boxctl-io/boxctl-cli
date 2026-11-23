@@ -207,12 +207,6 @@ func (m tuiModel) handleBacklogKey(key string) (tea.Model, tea.Cmd, bool) {
 		})
 		return m, nil, true
 	case "c":
-		if it.PR == 0 {
-			return m, m.fail("#%d has no pull request yet", id), true
-		}
-		if it.State == backlog.Done || it.State == backlog.Cancelled {
-			return m, m.fail("#%d is %s", id, backlogStateText(it.State)), true
-		}
 		md, cmd := m.askBacklogChange(it)
 		return md, cmd, true
 	case "r":
@@ -376,8 +370,15 @@ func (m tuiModel) askBacklogGoal(repo string) (tea.Model, tea.Cmd) {
 
 // askBacklogChange asks what to change on it's pull request, for a
 // follow-up run on its branch.
+// It's c in :backlog and in :runs (on the run's item).
 func (m tuiModel) askBacklogChange(it *backlog.Item) (tea.Model, tea.Cmd) {
 	id, pr := it.ID, it.PR
+	if pr == 0 {
+		return m, m.fail("#%d has no pull request yet", id)
+	}
+	if it.State == backlog.Done || it.State == backlog.Cancelled {
+		return m, m.fail("#%d is %s", id, backlogStateText(it.State))
+	}
 	body := []string{
 		"A follow-up run makes them on the pull request's branch, pushes, and comments on it,",
 		"once no other run of this item is going. Review comments on the PR are read too.",
