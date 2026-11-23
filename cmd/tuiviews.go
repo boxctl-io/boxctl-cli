@@ -77,7 +77,7 @@ var boxesView = &tableView{
 	empty:    "No boxes yet. Press c to create one.",
 	hotkeys: []hotkey{
 		{"s", "shell"}, {"a", "claude"}, {"d", "describe"}, {"y", "json"}, {"l", "logs"}, {"c", "create"},
-		{"p", "pause"}, {"r", "resume"}, {"K", "keep"}, {"e", "expose"}, {"ctrl-d", "delete"},
+		{"p", "pause"}, {"r", "resume"}, {"K", "keep"}, {"e", "expose"}, {"space", "mark"}, {"ctrl-d", "delete"},
 		{"0", "all"}, {"1", "running"}, {"2", "paused"},
 	},
 	rows: func(m *tuiModel) []tableRow {
