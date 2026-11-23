@@ -118,6 +118,11 @@ func (m tuiModel) runCommand(line string) (tea.Model, tea.Cmd) {
 		}
 		return m.ssh(words[1])
 	}
+	if v := m.app.findView(words[0]); v == prsView || m.app.other().findView(words[0]) == prsView {
+		if len(words) > 1 && strings.Contains(words[1], "/") {
+			return m, m.openPRs(words[1]) // `:prs owner/name`
+		}
+	}
 	v := m.app.findView(words[0])
 	if v == nil {
 		v = m.app.other().findView(words[0]) // openView switches sides
@@ -330,6 +335,17 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if md, cmd, ok := m.handleRunsKey(key); ok {
 			return md, cmd
 		}
+	}
+	if t.view == prsView {
+		if md, cmd, ok := m.handlePRsKey(key); ok {
+			return md, cmd
+		}
+	}
+	if t.view == reposView && key == "p" {
+		if r := m.currentRow(); r != nil {
+			return m, m.openPRs(r.key)
+		}
+		return m, nil
 	}
 	if t.view == reposView && key == "a" {
 		if r := m.currentRow(); r != nil {
@@ -626,6 +642,12 @@ func (m *tuiModel) pushHelp() {
 			"  r asks for a name (the backed-up box's by default) and restores the backup as a new box,",
 			"  paused at its own size (`boxctl restore`); a size after the name boots it fresh at that size.")
 	}
+	if v == prsView {
+		lines = append(lines, "", "Open PRs",
+			"  The open pull requests of the current directory's GitHub repo, `:prs owner/name`, or the one p picked in :repos.",
+			"  enter describes one; g asks what Claude should do on its branch (`boxctl claude --pr N --goal ...`), unattended;",
+			"  o opens it in the browser. Asked of GitHub when opened and with R, never on the tick.")
+	}
 	if v == reposView {
 		lines = append(lines, "", "GitHub Repos",
 			"  The repositories gh's account can reach (gh api user/repos), newest push first;",
@@ -649,6 +671,12 @@ func (m *tuiModel) pushHelp() {
 // describe pushes the page's box or backup as a describe page.
 func (m tuiModel) describe() (tea.Model, tea.Cmd) {
 	t := m.top()
+	if t.kind == pageTable && t.view == prsView {
+		if p := m.currentPR(); p != nil {
+			m.push(page{kind: pageText, title: fmt.Sprintf("%s#%d", m.prsRepo, p.Number), lines: describePR(m.prsRepo, *p)})
+		}
+		return m, nil
+	}
 	if t.kind == pageTable && t.view == reposView {
 		if r := m.currentRow(); r != nil {
 			if repo := m.repo(r.key); repo != nil {
@@ -691,6 +719,12 @@ func (m tuiModel) describe() (tea.Model, tea.Cmd) {
 // showJSON pushes the page's box as the API returns it.
 func (m tuiModel) showJSON() (tea.Model, tea.Cmd) {
 	t := m.top()
+	if t.kind == pageTable && t.view == prsView {
+		if p := m.currentPR(); p != nil {
+			m.push(page{kind: pageText, title: fmt.Sprintf("%s#%d.json", m.prsRepo, p.Number), lines: jsonLines(*p)})
+		}
+		return m, nil
+	}
 	if t.kind == pageTable && t.view == reposView {
 		if r := m.currentRow(); r != nil {
 			if repo := m.repo(r.key); repo != nil {
