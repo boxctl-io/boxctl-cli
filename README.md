@@ -31,7 +31,7 @@ boxctl rm my-box                            # done
 |---|---|
 | `login` / `logout` | Save or forget your personal token |
 | `create`, `ls`, `rm`, `pause`, `resume`, `keep` | Box lifecycle (`rm`/`pause`/`resume` also take `all`) |
-| `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups`; `/` to filter. `ctrl-t` switches to the board |
+| `tui` | All of the above in a k9s-style full-screen view: `:boxes`, `:urls`, `:images`, `:sizes`, `:backups` (space marks several, ctrl-d deletes them); `/` to filter. `ctrl-t` switches to the board |
 | `dashboard` | The same as `tui`, as a web page served on `127.0.0.1` and opened in your browser, with a terminal on a box in the page |
 | `images`, `sizes` | What you can boot, and at what size |
 | `ssh`, `ssh-proxy` | Shell or one-off command; real `ssh`/`scp`/`rsync` through a proxy |

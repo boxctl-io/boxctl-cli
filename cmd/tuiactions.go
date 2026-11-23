@@ -366,8 +366,22 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		m.pushHelp()
 		return m, nil
+	case " ":
+		if t.view == backupsView {
+			if r := m.currentRow(); r != nil {
+				if m.marked[r.key] {
+					delete(m.marked, r.key)
+				} else {
+					m.marked[r.key] = true
+				}
+				m.move(1)
+			}
+			return m, nil
+		}
 	case "esc":
 		switch {
+		case t.view == backupsView && len(m.marked) > 0:
+			clear(m.marked)
 		case m.filter.Value() != "":
 			m.filter.SetValue("")
 		case len(m.pages) > 1:
@@ -603,7 +617,7 @@ func (m *tuiModel) pushHelp() {
 	}
 	if v == backupsView {
 		lines = append(lines, "", "Backups",
-			"  ctrl-d deletes the backup, after asking.",
+			"  ctrl-d deletes the backup, after asking; space marks backups (esc clears), and ctrl-d then deletes all the marked ones.",
 			"  r asks for a name (the backed-up box's by default) and restores the backup as a new box,",
 			"  paused at its own size (`boxctl restore`); a size after the name boots it fresh at that size.")
 	}
@@ -854,6 +868,9 @@ func (m tuiModel) askRestore() (tea.Model, tea.Cmd) {
 
 // askDeleteBackup is `boxctl backups rm` for the backups view's row.
 func (m tuiModel) askDeleteBackup() (tea.Model, tea.Cmd) {
+	if len(m.marked) > 0 {
+		return m.askDeleteMarkedBackups()
+	}
 	r := m.currentRow()
 	if r == nil {
 		return m, nil
@@ -887,6 +904,53 @@ func (m tuiModel) askDeleteBackup() (tea.Model, tea.Cmd) {
 			return tuiActionMsg{name: b.ID, verb: "delete", err: err, result: "deleted backup " + b.ID}
 		}
 		return m, tea.Batch(run, m.say("deleting backup %s…", b.ID), m.spinIfBusy())
+	})
+	return m, nil
+}
+
+// askDeleteMarkedBackups deletes every backup marked with space, after
+// one question. A mark whose backup is gone since is dropped.
+func (m tuiModel) askDeleteMarkedBackups() (tea.Model, tea.Cmd) {
+	var ids []string
+	var total int64
+	for _, b := range m.backups {
+		if m.marked[b.ID] {
+			ids = append(ids, b.ID)
+			total += b.SizeBytes
+		}
+	}
+	if len(ids) == 0 {
+		clear(m.marked)
+		return m, nil
+	}
+	for _, id := range ids {
+		if v, ok := m.pending[id]; ok {
+			return m, m.fail("%s is being %s", id, pastTense(v))
+		}
+	}
+	body := append([]string{}, ids...)
+	if len(body) > 8 {
+		body = append(body[:8], fmt.Sprintf("… and %d more", len(ids)-8))
+	}
+	body = append(body, "", fmt.Sprintf("%s in all. This cannot be undone.", client.FormatBytes(total)))
+	m.ask(fmt.Sprintf("Delete %d backups?", len(ids)), body, func(m tuiModel) (tea.Model, tea.Cmd) {
+		var cmds []tea.Cmd
+		for _, id := range ids {
+			if _, ok := m.pending[id]; ok {
+				continue
+			}
+			delete(m.marked, id)
+			m.pending[id] = "delete"
+			c := m.c
+			cmds = append(cmds, func() tea.Msg {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				defer cancel()
+				err := c.DeleteBackup(ctx, id)
+				return tuiActionMsg{name: id, verb: "delete", err: err, result: "deleted backup " + id}
+			})
+		}
+		cmds = append(cmds, m.say("deleting %d backups…", len(cmds)), m.spinIfBusy())
+		return m, tea.Batch(cmds...)
 	})
 	return m, nil
 }

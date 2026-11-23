@@ -410,7 +410,11 @@ func (m tuiModel) table(w, inner int) (string, []string) {
 			}
 			cells = append(cells, padRight(c, widths[i]))
 		}
-		plain := " " + strings.Join(cells, "  ")
+		lead := " "
+		if t.view == backupsView && m.marked[row.key] {
+			lead = "*"
+		}
+		plain := lead + strings.Join(cells, "  ")
 		if r == t.cursor {
 			lines = append(lines, k9s.selected.Render(padRight(fit(plain, w), w)))
 			continue
@@ -422,7 +426,7 @@ func (m tuiModel) table(w, inner int) (string, []string) {
 				cells[i] = st.Render(cells[i])
 			}
 		}
-		lines = append(lines, " "+strings.Join(cells, "  "))
+		lines = append(lines, lead+strings.Join(cells, "  "))
 	}
 	return title, lines
 }

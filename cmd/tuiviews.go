@@ -189,7 +189,7 @@ var backupsView = &tableView{
 	columns:  []column{{"ID", 'I'}, {"BOX", 'B'}, {"SIZE", 'Z'}, {"STATUS", 'S'}, {"AGE", 'A'}},
 	stateCol: 3,
 	empty:    "No backups yet. Pause a box and run `boxctl download <name>` to make one.",
-	hotkeys:  []hotkey{{"r", "restore"}, {"d", "describe"}, {"y", "json"}},
+	hotkeys:  []hotkey{{"space", "mark"}, {"r", "restore"}, {"d", "describe"}, {"y", "json"}},
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow
 		for _, b := range m.backups {
