@@ -60,16 +60,17 @@ const (
 // Action is a side effect Decide asks for; the backlog's own state
 // changes it has already made.
 type Action struct {
-	Kind   ActionKind
-	Item   int
-	Repo   string
-	Box    string
-	Run    Kind   // Launch
-	PR     int    // Launch of a follow-up, Rerun, UpdateBranch
-	Goal   string // Launch: what Claude is told
-	Model  string // Launch
-	SHA    string // UpdateBranch
-	RunIDs []int64
+	Kind    ActionKind
+	Item    int
+	Repo    string
+	Box     string
+	Run     Kind   // Launch
+	PR      int    // Launch of a follow-up, Rerun, UpdateBranch
+	Goal    string // Launch: what Claude is told
+	Model   string // Launch
+	Harness string // Launch
+	SHA     string // UpdateBranch
+	RunIDs  []int64
 }
 
 // FreshChecks is how long after a run ended a PR with no checks at all
@@ -170,7 +171,7 @@ func Decide(q *Backlog, o Obs) []Action {
 		setNote(it, "starting "+string(w.kind)+" run on "+box, now)
 		active++
 		perRepo[it.Repo]++
-		acts = append(acts, Action{Kind: Launch, Item: it.ID, Repo: it.Repo, Box: box, Run: w.kind, PR: it.PR, Goal: goal, Model: it.Model})
+		acts = append(acts, Action{Kind: Launch, Item: it.ID, Repo: it.Repo, Box: box, Run: w.kind, PR: it.PR, Goal: goal, Model: it.Model, Harness: it.Harness})
 	}
 	return acts
 }

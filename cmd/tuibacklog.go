@@ -269,7 +269,10 @@ func (m tuiModel) askBacklogRepo() (tea.Model, tea.Cmd) {
 		if err != nil {
 			return m, m.fail("%v", err)
 		}
-		return m.askBacklogGoal(owner + "/" + name)
+		repo := owner + "/" + name
+		return m.askHarness(repo, func(m tuiModel, harness string) (tea.Model, tea.Cmd) {
+			return m.askBacklogGoal(repo, harness)
+		})
 	})
 	if m.dialog != nil && m.dialog.input != nil {
 		m.dialog.choices = backlogRepoChoices
@@ -352,9 +355,10 @@ func parseBacklogLimit(s string) (int, *int, error) {
 	return n[0], &n[1], nil
 }
 
-// askBacklogGoal asks for a goal on repo and adds it to the backlog.
-func (m tuiModel) askBacklogGoal(repo string) (tea.Model, tea.Cmd) {
-	cmd := m.promptText("Add a goal on "+repo, []string{
+// askBacklogGoal asks for a goal on repo and adds it to the backlog,
+// its runs to use harness ("" for the default).
+func (m tuiModel) askBacklogGoal(repo, harness string) (tea.Model, tea.Cmd) {
+	cmd := m.promptText("Add a goal on "+repo+harnessSuffix(harness), []string{
 		"It runs unattended (boxctl claude --goal) when a slot is free, and ends in a pull request",
 		"that :backlog then watches: CI and conflicts get follow-up runs; m merges it once it's green.",
 	}, "what to do, e.g. bump Go and fix what breaks", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
@@ -362,7 +366,7 @@ func (m tuiModel) askBacklogGoal(repo string) (tea.Model, tea.Cmd) {
 			return m, m.fail("a goal is needed")
 		}
 		return m, m.backlogChange("queued a goal on "+repo, func() error {
-			_, err := addBacklogItem(repo, value, "", 0)
+			_, err := addBacklogItem(repo, value, "", harness, 0)
 			return err
 		})
 	})
@@ -419,6 +423,9 @@ func describeBacklogItem(it *backlog.Item) []string {
 	}
 	if it.Model != "" {
 		lines = append(lines, kv("Model", it.Model))
+	}
+	if it.Harness != "" {
+		lines = append(lines, kv("Harness", it.Harness))
 	}
 	lines = append(lines, "", "Runs")
 	if len(it.Runs) == 0 {

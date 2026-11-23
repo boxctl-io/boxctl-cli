@@ -1,12 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestListHarnesses(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	newFakeGitHub(t, prOnlyFiles)
 	root := t.TempDir()
 	harnessRoot = func() (string, error) { return root, nil }
 	t.Cleanup(func() {
@@ -29,7 +35,7 @@ func TestListHarnesses(t *testing.T) {
 	mk("default", "CLAUDE.md", "\n## Fallback rules\n")
 	mk("empty", "notes.txt", "x")
 
-	hs, err := listHarnesses()
+	hs, err := listHarnesses(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,11 +45,12 @@ func TestListHarnesses(t *testing.T) {
 		got[h.Name] = h
 		order = append(order, h.Name)
 	}
-	if want := []string{"pr-only", "default", "docs", "empty"}; len(order) != 4 || order[0] != want[0] || order[1] != want[1] || order[3] != want[3] {
+	// Yours first (sorted), then the repository's.
+	if want := []string{"default", "docs", "empty", "other", "pr-only"}; strings.Join(order, " ") != strings.Join(want, " ") {
 		t.Fatalf("order %v, want %v", order, want)
 	}
-	if h := got["pr-only"]; h.Source != "built-in" || h.Description == "" {
-		t.Errorf("built-in: %+v", h)
+	if h := got["pr-only"]; h.Source != "o/h" || h.Description != "never merge" {
+		t.Errorf("repository: %+v", h)
 	}
 	if h := got["docs"]; h.Description != "Edits docs" || h.Source != "yours" || h.Error != "" {
 		t.Errorf("docs: %+v", h)
@@ -54,9 +61,9 @@ func TestListHarnesses(t *testing.T) {
 	if got["empty"].Error == "" {
 		t.Errorf("a directory with no rules should be unusable: %+v", got["empty"])
 	}
-	// One of your own named pr-only replaces the built-in.
+	// One of your own named pr-only shadows the repository's.
 	mk("pr-only", "CLAUDE.md", "# Mine")
-	hs, _ = listHarnesses()
+	hs, err = listHarnesses(context.Background())
 	n := 0
 	for _, h := range hs {
 		if h.Name == "pr-only" {

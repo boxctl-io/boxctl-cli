@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -260,6 +261,7 @@ func TestInvalidEffortFailsFast(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv(tokenEnv, "tok")
+	newFakeGitHub(t, prOnlyFiles)
 	t.Cleanup(func() {
 		claudeGoal, claudeRepos, claudeEffortFlag, claudeModelFlag, apiURLFlag = "", nil, "", "", ""
 		_ = claudeCmd.Flags().Set("effort", "")
@@ -290,7 +292,7 @@ func TestInvalidEffortFailsFast(t *testing.T) {
 }
 
 // TestModelOnlyHarnessKeepsBuiltin: a harness that is only a model.json
-// has no rules, so it mustn't stand in for the built-in pr-only an
+// has no rules, so it mustn't stand in for pr-only, which an
 // unattended run gets -- the run gets both. An attended run gets just the
 // model.
 func TestModelOnlyHarnessKeepsBuiltin(t *testing.T) {
@@ -299,6 +301,7 @@ func TestModelOnlyHarnessKeepsBuiltin(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv(envClaudeModel, "")
 	t.Setenv(envClaudeEffort, "")
+	newFakeGitHub(t, prOnlyFiles)
 	t.Cleanup(func() { claudeHarnessArg, claudeGoal, claudeIssue, claudeHarness = "", "", 0, nil })
 	def := filepath.Join(home, ".boxctl", "harness", "default")
 	writeHarnessFile(t, def, harnessModelFile, `{"model":"sonnet","effort":"low"}`)
@@ -318,16 +321,14 @@ func TestModelOnlyHarnessKeepsBuiltin(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			claudeHarnessArg, claudeGoal, claudeIssue = tt.arg, tt.goal, tt.issue
-			cleanup, err := prepareHarness()
-			if err != nil {
+			if err := prepareHarness(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			defer cleanup()
 			h := claudeHarness
 			if h == nil {
 				t.Fatal("no harness")
 			}
-			if got := h.label == "built-in pr-only"; got != tt.builtin {
+			if got := isRemotePROnly(h); got != tt.builtin {
 				t.Errorf("built-in = %v, want %v (harness %s)", got, tt.builtin, h.label)
 			}
 			if tt.builtin && !h.rules() {
@@ -343,7 +344,7 @@ func TestModelOnlyHarnessKeepsBuiltin(t *testing.T) {
 		})
 	}
 	claudeHarnessArg, claudeGoal = "none", "fix it"
-	if _, err := prepareHarness(); err != nil || claudeHarness != nil {
+	if err := prepareHarness(context.Background()); err != nil || claudeHarness != nil {
 		t.Errorf("--harness none: %+v, %v", claudeHarness, err)
 	}
 }

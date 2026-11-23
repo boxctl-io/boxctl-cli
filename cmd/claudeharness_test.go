@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -53,89 +55,85 @@ func TestResolveHarnessName(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	writeHarnessFile(t, filepath.Join(home, ".boxctl", "harness", "pr-only"), "CLAUDE.md", "x")
-	got, err := resolveHarness("pr-only")
-	if err != nil || got != filepath.Join(home, ".boxctl", "harness", "pr-only") {
-		t.Errorf("resolveHarness(pr-only) = %q, %v", got, err)
+	newFakeGitHub(t, prOnlyFiles)
+	ctx := context.Background()
+	mine := filepath.Join(home, ".boxctl", "harness", "pr-only")
+	writeHarnessFile(t, mine, "CLAUDE.md", "x")
+	if got, _, err := resolveHarness(ctx, "pr-only"); err != nil || got != mine {
+		t.Errorf("yours wins: %q, %v", got, err)
 	}
-	if _, err := resolveHarness("nope"); err == nil {
+	if got, label, err := resolveHarness(ctx, "pr-only@main"); err != nil || got == mine || !strings.HasPrefix(label, "pr-only (o/h@main ") {
+		t.Errorf("a ref names the repository's: %q %q, %v", got, label, err)
+	}
+	if got, _, err := resolveHarness(ctx, "other"); err != nil || filepath.Base(got) != "other" {
+		t.Errorf("the repository's: %q, %v", got, err)
+	}
+	if _, _, err := resolveHarness(ctx, "nope"); err == nil {
 		t.Error("an unknown name should fail")
 	}
-}
-
-func TestStarterHarnessLoads(t *testing.T) {
-	h, err := loadHarness("harness-pr-only")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(h.managed) != 2 || len(h.config) != 1 {
-		t.Errorf("managed = %v, config = %v", h.managed, h.config)
+	if _, _, err := resolveHarness(ctx, "./nope"); err == nil {
+		t.Error("a missing path should fail")
 	}
 }
 
-// The built-in's label is not its directory: apply reads from dir, so
-// every listed file must be under it (a label there once sent an empty
-// tar, and chmod on the box failed on an empty /etc/claude-code).
-func TestBuiltinHarnessFilesExist(t *testing.T) {
-	cleanup, err := builtinHarness()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanup()
-	h := claudeHarness
-	if h.label != "built-in pr-only" || h.dir == h.label {
-		t.Fatalf("dir %q, label %q", h.dir, h.label)
-	}
-	for _, rel := range append(append([]string{}, h.managed...), h.config...) {
-		if _, err := os.Stat(filepath.Join(h.dir, rel)); err != nil {
-			t.Errorf("%s: %v", rel, err)
-		}
-	}
+func isRemotePROnly(h *harness) bool {
+	return h != nil && strings.HasPrefix(h.label, "pr-only (o/h@main ")
 }
 
 func TestPrepareHarnessChoice(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	gh := newFakeGitHub(t, prOnlyFiles)
 	t.Cleanup(func() { claudeHarnessArg, claudeGoal, claudeIssue, claudeHarness = "", "", 0, nil })
 	pick := func(arg, goal string) *harness {
 		t.Helper()
 		claudeHarnessArg, claudeGoal, claudeIssue = arg, goal, 0
-		cleanup, err := prepareHarness()
-		if err != nil {
+		if err := prepareHarness(context.Background()); err != nil {
 			t.Fatal(err)
 		}
-		defer cleanup()
 		return claudeHarness
 	}
 
 	if pick("", "") != nil {
 		t.Error("a plain run with no default gets no harness")
 	}
-	if h := pick("", "fix it"); h == nil || h.label != "built-in pr-only" {
-		t.Errorf("--goal gets the built-in pr-only, got %+v", h)
+	if h := pick("", "fix it"); !isRemotePROnly(h) {
+		t.Errorf("--goal gets the repository's pr-only, got %+v", h)
 	}
 	if pick("none", "fix it") != nil {
 		t.Error("--harness none turns the goal default off")
 	}
 	// --issue is a goal that only names an issue: unattended all the same.
 	claudeHarnessArg, claudeGoal, claudeIssue = "", "", 7
-	cleanup, err := prepareHarness()
-	if err != nil {
+	if err := prepareHarness(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	cleanup()
-	if claudeHarness == nil || claudeHarness.label != "built-in pr-only" {
-		t.Errorf("--issue gets the built-in pr-only, got %+v", claudeHarness)
+	if !isRemotePROnly(claudeHarness) {
+		t.Errorf("--issue gets pr-only, got %+v", claudeHarness)
 	}
-	if h := pick(harnessPROnly, ""); h == nil || h.label != "built-in pr-only" {
-		t.Errorf("--harness pr-only is the built-in, got %+v", h)
+	if h := pick(harnessPROnly, ""); !isRemotePROnly(h) {
+		t.Errorf("--harness pr-only is the repository's, got %+v", h)
 	}
 	mine := filepath.Join(home, ".boxctl", "harness", harnessPROnly)
 	writeHarnessFile(t, mine, "CLAUDE.md", "mine")
 	if h := pick(harnessPROnly, ""); h == nil || h.dir != mine {
-		t.Errorf("your own pr-only beats the built-in, got %+v", h)
+		t.Errorf("your own pr-only beats the repository's, got %+v", h)
 	}
+	if h := pick("", "fix it"); h == nil || h.dir != mine {
+		t.Errorf("your own pr-only is a goal's too, got %+v", h)
+	}
+	_ = os.RemoveAll(mine)
+
+	// Nothing cached and GitHub down: an unattended run fails rather
+	// than run without its guardrail.
+	gh.down.Store(true)
+	_ = os.RemoveAll(filepath.Join(home, ".boxctl", "harness-cache"))
+	claudeHarnessArg, claudeGoal = "", "fix it"
+	if err := prepareHarness(context.Background()); err == nil {
+		t.Error("a goal without pr-only should fail")
+	}
+	gh.down.Store(false)
 
 	def := filepath.Join(home, ".boxctl", "harness", "default")
 	writeHarnessFile(t, def, "CLAUDE.md", "mine")
@@ -143,7 +141,7 @@ func TestPrepareHarnessChoice(t *testing.T) {
 		t.Errorf("a default directory applies to every run, got %+v", h)
 	}
 	if h := pick("", "fix it"); h == nil || h.dir != def {
-		t.Errorf("your default beats the built-in for --goal, got %+v", h)
+		t.Errorf("your default beats pr-only for --goal, got %+v", h)
 	}
 	if pick("none", "") != nil {
 		t.Error("--harness none turns your default off")

@@ -168,15 +168,16 @@ func describePR(repo string, p ghPR) []string {
 }
 
 // claudePRArgs is the command line `g` runs in :prs, less the binary.
-func claudePRArgs(repo string, pr int, goal string) []string {
-	args := claudeRepoArgs(repo, goal)
+func claudePRArgs(repo string, pr int, goal, harness string) []string {
+	args := claudeRepoArgs(repo, goal, harness)
 	return append(args[:3:3], append([]string{"--pr", strconv.Itoa(pr)}, args[3:]...)...)
 }
 
-// askPRGoal asks what Claude should do on pull request p, then runs it.
-func (m tuiModel) askPRGoal(p ghPR) (tea.Model, tea.Cmd) {
+// askPRGoal asks what Claude should do on pull request p, then runs it
+// with harness ("" for the default).
+func (m tuiModel) askPRGoal(p ghPR, harness string) (tea.Model, tea.Cmd) {
 	repo := m.prsRepo
-	title := fmt.Sprintf("Ask Claude about %s#%d", repo, p.Number)
+	title := fmt.Sprintf("Ask Claude about %s#%d", repo, p.Number) + harnessSuffix(harness)
 	cmd := m.promptText(title, []string{
 		"Claude works on the PR's branch unattended on a new box (boxctl claude --pr --goal);",
 		"anything it changes is pushed to that branch. :boxes' RUN column and l follow it.",
@@ -184,7 +185,7 @@ func (m tuiModel) askPRGoal(p ghPR) (tea.Model, tea.Cmd) {
 		if value == "" {
 			return m, m.fail("a goal is needed")
 		}
-		return m.claudeRun(fmt.Sprintf("%s#%d", repo, p.Number), claudePRArgs(repo, p.Number, value), true)
+		return m.claudeRun(fmt.Sprintf("%s#%d", repo, p.Number), claudePRArgs(repo, p.Number, value, harness), true)
 	})
 	return m, cmd
 }
@@ -202,7 +203,10 @@ func (m tuiModel) handlePRsKey(key string) (tea.Model, tea.Cmd, bool) {
 	switch key {
 	case "g":
 		if p := m.currentPR(); p != nil {
-			md, cmd := m.askPRGoal(*p)
+			pr := *p
+			md, cmd := m.askHarness(fmt.Sprintf("%s#%d", m.prsRepo, pr.Number), func(m tuiModel, harness string) (tea.Model, tea.Cmd) {
+				return m.askPRGoal(pr, harness)
+			})
 			return md, cmd, true
 		}
 		return m, nil, true

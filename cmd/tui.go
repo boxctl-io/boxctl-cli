@@ -166,7 +166,7 @@ var tuiFlashFor = 5 * time.Second
 // Messages from the commands the model runs.
 type (
 	tuiListMsg struct {
-		resource  string // boxes, images, sizes, backups, repos
+		resource  string // boxes, images, sizes, backups, repos, prs, harnesses
 		vms       []client.VM
 		images    []client.Image
 		sizes     []client.Size
@@ -174,8 +174,9 @@ type (
 		repos     []ghRepo
 		prs       []ghPR
 		prsRepo   string // the repository prs are of
-		harnesses []harnessEntry
 		backlog   *backlog.Backlog
+		harnesses []string
+		catalog   []harnessEntry // resource harnesscat (harnesses.go)
 		err       error
 	}
 	tuiActionMsg struct {
@@ -252,8 +253,11 @@ type tuiDialog struct {
 	// every key and render, so a list that arrives later shows up): the
 	// ones matching the text, up/down to select, tab to complete.
 	choices func(m *tuiModel) []string
-	sel     int  // the selected match
-	picked  bool // up/down chose sel since the text last changed
+	// typed says whether text that isn't a choice is still what enter
+	// submits; nil means an owner/name (parseRepo).
+	typed  func(v string) bool
+	sel    int  // the selected match
+	picked bool // up/down chose sel since the text last changed
 }
 
 type tuiModel struct {
@@ -271,14 +275,17 @@ type tuiModel struct {
 	// (until the tui quits, whichever side is shown).
 	backlogOn bool
 
-	vms       []client.VM // every box, as ls sorts them
-	images    []client.Image
-	sizes     []client.Size
-	backups   []client.Backup
-	repos     []ghRepo // GitHub's, newest push first (tuirepos.go)
-	prs       []ghPR   // :prs: prsRepo's open pull requests (tuiprs.go)
-	prsRepo   string
-	harnesses []harnessEntry   // :harnesses (harnesses.go)
+	vms     []client.VM // every box, as ls sorts them
+	images  []client.Image
+	sizes   []client.Size
+	backups []client.Backup
+	repos   []ghRepo // GitHub's, newest push first (tuirepos.go)
+	prs     []ghPR   // :prs: prsRepo's open pull requests (tuiprs.go)
+	prsRepo string
+	// harnesses are the names a run can pick (tuiharness.go): yours,
+	// then the harness repository's.
+	harnesses []string
+	catalog   []harnessEntry   // :harnesses (harnesses.go)
 	reposAt   time.Time        // when repos came from GitHub, or the cache did
 	backlog   *backlog.Backlog // ~/.boxctl/backlog.json (tuibacklog.go)
 	loaded    map[string]bool  // resources listed at least once
@@ -385,7 +392,7 @@ func (m *tuiModel) list(resource string) tea.Cmd {
 	if resource == "prs" {
 		return m.listPRs()
 	}
-	if resource == "harnesses" {
+	if resource == "harnesscat" {
 		return listHarnessesCmd()
 	}
 	if resource == "backlog" {
@@ -506,6 +513,22 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuiListMsg:
 		delete(m.loading, msg.resource)
+		if msg.resource == "harnesses" {
+			// Yours are listed even when the repository's couldn't be.
+			m.harnesses, m.loaded["harnesses"] = msg.harnesses, true
+			if msg.err != nil {
+				return m, m.fail("listing harnesses: %v", msg.err)
+			}
+			return m, nil
+		}
+		if msg.resource == "harnesscat" {
+			// Yours are listed even when the repository's couldn't be.
+			m.catalog, m.loaded["harnesscat"] = msg.catalog, true
+			if msg.err != nil {
+				return m, m.fail("listing harnesses: %v", msg.err)
+			}
+			return m, nil
+		}
 		if msg.err != nil {
 			return m, m.fail("listing %s: %v", msg.resource, msg.err)
 		}
@@ -530,6 +553,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "harnesses":
 			m.harnesses = msg.harnesses
+		case "harnesscat":
+			m.catalog = msg.catalog
 		case "backlog":
 			m.backlog = msg.backlog
 		}
