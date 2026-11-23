@@ -286,6 +286,7 @@ type tuiModel struct {
 	create      *tuiCreateForm
 	creating    bool
 	pending     map[string]string // box -> verb in flight
+	marked      map[string]bool   // :backups: ids marked with space, for ctrl-d
 	spin        bspinner.Model
 	spinning    bool
 
@@ -340,6 +341,7 @@ func newTUI(c *client.Client, app *tuiApp) tuiModel {
 		filter:      f,
 		command:     cmd,
 		pending:     map[string]string{},
+		marked:      map[string]bool{},
 		spin:        sp,
 	}
 }
