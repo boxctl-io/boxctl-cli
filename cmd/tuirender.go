@@ -395,11 +395,18 @@ func (m tuiModel) table(w, inner int) (string, []string) {
 	lines := []string{" " + strings.Join(header, "  ")}
 
 	// The window of rows that keeps the cursor on screen.
-	top := 0
-	if t.cursor >= inner-1 {
-		top = t.cursor - (inner - 1) + 1
+	// It scrolls only when the cursor leaves it, so moving back up from
+	// the last row moves the highlight, not the whole list.
+	vis := max(inner-1, 1)
+	top := min(t.top, max(len(rows)-vis, 0))
+	if t.cursor < top {
+		top = t.cursor
+	} else if t.cursor >= top+vis {
+		top = t.cursor - vis + 1
 	}
-	end := min(top+inner-1, len(rows))
+	top = max(top, 0)
+	t.top = top
+	end := min(top+vis, len(rows))
 	for r := top; r < end; r++ {
 		row := rows[r]
 		var cells []string

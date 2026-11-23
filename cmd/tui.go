@@ -222,6 +222,7 @@ type page struct {
 	kind     pageKind
 	view     *tableView // pageTable
 	cursor   int
+	top      int    // first row shown; moves only when the cursor leaves the window
 	selected string // the row key under the cursor, to find it again after a refresh
 	sortCol  int    // -1: the view's own order
 	item     int    // :runs: only this backlog item's runs (0: every item's)
