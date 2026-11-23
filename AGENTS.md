@@ -544,6 +544,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   it to that run's `Ask`; a failed or lost run puts it back. A request gets
   `Budget` failed runs (counted from `Item.Asked`, so asking again starts
   afresh); `retry` adds one.
+  `:backlog` lists items newest first (creation time) so a row never
+  moves when its state changes; `1`/`2`/`3` there pick newest/oldest/
+  dispatch order (`backlogOrdered`). Dispatch itself always uses
+  `Backlog.Sorted`.
   `:backlog`'s `o` is `cmd/prtab.go`'s `openPR`: on a Mac with Chrome
   running, an AppleScript loads the PR into the one tab it used last
   (its Chrome id in `~/.boxctl/pr-tab`, reused only while still on

@@ -399,8 +399,13 @@ func (m tuiModel) handleTableKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.refresh(), m.listRepos(true), m.spinIfBusy())
 		}
 		return m, m.refresh()
-	case "0", "1", "2":
-		if t.view == boxesView {
+	case "0", "1", "2", "3":
+		if t.view == backlogView && key != "0" {
+			m.backlogOrder = int(key[0] - '1')
+			t.sortCol = -1
+			return m, nil
+		}
+		if t.view == boxesView && key != "3" {
 			m.stateFilter = stateFilter(key[0] - '0')
 		}
 		return m, nil
