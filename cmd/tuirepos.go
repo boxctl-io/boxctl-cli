@@ -197,7 +197,7 @@ var reposView = &tableView{
 	columns:  []column{{"REPO", 'R'}, {"PUSHED", 'P'}, {"LANGUAGE", 'L'}, {"VISIBILITY", 'V'}, {"DESCRIPTION", 'D'}},
 	stateCol: 3,
 	empty:    "No repositories: gh lists the ones its account can reach (gh auth login).",
-	hotkeys:  []hotkey{{"enter", "claude on a new box"}, {"g", "goal run"}, {"a", "add a goal"}, {"d", "describe"}, {"y", "json"}, {"R", "refresh"}},
+	hotkeys:  []hotkey{{"enter", "claude on a new box"}, {"g", "goal run"}, {"a", "add a goal"}, {"p", "open PRs"}, {"d", "describe"}, {"y", "json"}, {"R", "refresh"}},
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow
 		for _, r := range m.repos {
@@ -296,18 +296,25 @@ func claudeRepoArgs(repo, goal string) []string {
 // the run starts Claude and returns, and nothing needs the terminal,
 // so its stdout is kept too: the "Box:" line it prints names the box.
 func (m tuiModel) claudeRepo(repo, goal string) (tea.Model, tea.Cmd) {
+	return m.claudeRun(repo, claudeRepoArgs(repo, goal), goal != "")
+}
+
+// claudeRun runs boxctl with args as claudeRepo does; what names the
+// repository (or pull request) in the flash, goal says the run starts
+// Claude unattended and returns.
+func (m tuiModel) claudeRun(what string, args []string, goal bool) (tea.Model, tea.Cmd) {
 	exe, err := os.Executable()
 	if err != nil {
 		return m, m.fail("finding boxctl: %v", err)
 	}
-	cmd := exec.Command(exe, claudeRepoArgs(repo, goal)...)
+	cmd := exec.Command(exe, args...)
 	errTail, outTail := &tailBuffer{max: 4096}, &tailBuffer{max: 4096}
 	cmd.Stderr = io.MultiWriter(os.Stderr, errTail)
-	if goal != "" {
+	if goal {
 		cmd.Stdout = io.MultiWriter(os.Stdout, outTail)
 	}
 	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
-		return tuiClaudeDoneMsg{repo: repo, goal: goal != "", err: err, stderr: errTail.String(), stdout: outTail.String()}
+		return tuiClaudeDoneMsg{repo: what, goal: goal, err: err, stderr: errTail.String(), stdout: outTail.String()}
 	})
 }
 

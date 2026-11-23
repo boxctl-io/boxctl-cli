@@ -953,6 +953,52 @@ func TestTUISwitchSides(t *testing.T) {
 	}
 }
 
+func TestTUIPRs(t *testing.T) {
+	tuiFlashFor = time.Millisecond
+	asked := ""
+	listGitHubPRs = func(_ context.Context, repo string) ([]ghPR, error) {
+		asked = repo
+		return []ghPR{
+			{Number: 7, Title: "Fix the thing", HeadRefName: "fix-thing", ReviewDecision: "APPROVED"},
+			{Number: 9, Title: "WIP", HeadRefName: "wip", IsDraft: true},
+		}, nil
+	}
+	c, _ := fakeBoxServer(t, nil)
+	m := boardTUI(c)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	m = next.(tuiModel)
+	m, _ = press(t, m, ":")
+	for _, r := range "prs acme/web" {
+		m, _ = press(t, m, string(r))
+	}
+	m, cmd := press(t, m, "enter")
+	if m.top().view != prsView || m.prsRepo != "acme/web" || !m.loading["prs"] {
+		t.Fatalf("view=%v repo=%q loading=%v", m.top().view, m.prsRepo, m.loading)
+	}
+	for _, msg := range runCmd(cmd) {
+		if lm, ok := msg.(tuiListMsg); ok && lm.resource == "prs" {
+			next, _ = m.Update(lm)
+			m = next.(tuiModel)
+		}
+	}
+	if asked != "acme/web" || keys(m.rows()) != "7 9" {
+		t.Fatalf("asked=%q rows=%q", asked, keys(m.rows()))
+	}
+	view := m.View()
+	for _, want := range []string{"Open PRs[2]", "Fix the thing", "approved", "draft", "ask Claude"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view lacks %q:\n%s", want, view)
+		}
+	}
+	if got, want := strings.Join(claudePRArgs("acme/web", 7, "status?"), " "), "claude --repo acme/web --pr 7 --goal status?"; got != want {
+		t.Errorf("args = %q, want %q", got, want)
+	}
+	m, _ = press(t, m, "enter")
+	if !strings.Contains(strings.Join(m.top().lines, "\n"), "acme/web#7") {
+		t.Errorf("describe page: %v", m.top().lines)
+	}
+}
+
 func TestTUIMarkAndDeleteBoxes(t *testing.T) {
 	tuiFlashFor = time.Millisecond
 	c, calls := fakeBoxServer(t, tuiFixture())

@@ -91,7 +91,7 @@ func TestBoardHome(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(tuiModel)
 	view := m.View()
-	for _, want := range []string{"Home[3]", "Backlog", "Runs", "GitHub Repos", "t  :backlog", "u  :runs", "h  :repos"} {
+	for _, want := range []string{"Home[4]", "Backlog", "Runs", "GitHub Repos", "t  :backlog", "u  :runs", "h  :repos"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("board home lacks %q:\n%s", want, view)
 		}
