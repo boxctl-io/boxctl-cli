@@ -286,3 +286,34 @@ func TestTUIRunsPauseResume(t *testing.T) {
 		t.Errorf("r on a gone box: flash %q", m2.flash)
 	}
 }
+
+// c in :runs asks for changes on the run's item -- even when the run's
+// box is gone -- and says so when the item has no pull request yet.
+func TestTUIRunsRequestChanges(t *testing.T) {
+	stubBacklog(t, nil, func([]string) ([]byte, error) { return nil, nil })
+	tuiFlashFor = time.Millisecond
+	vms := runsFixture(t)
+	c, _ := fakeBoxServer(t, vms)
+	m := runsTUI(t, c, vms)
+	next, _ := m.runCommand("runs")
+	m = next.(tuiModel)
+
+	m.top().selected = "31/1"
+	if m2, _ := press(t, m, "c"); m2.dialog != nil || !strings.Contains(m2.flash, "no pull request") {
+		t.Errorf("no PR: dialog %v, flash %q", m2.dialog, m2.flash)
+	}
+	m.top().selected = "3/2" // its box is gone
+	m, _ = press(t, m, "c")
+	if m.dialog == nil || !strings.Contains(m.dialog.title, "o/r#7") {
+		t.Fatalf("prompt: %+v, flash %q", m.dialog, m.flash)
+	}
+	m = typeIn(t, m, "rename it")
+	m, cmd := press(t, m, "enter")
+	m = feedBacklog(m, cmd)
+	if it := m.backlog.Item(3); it.Change != "rename it" {
+		t.Errorf("change = %q (flash %q)", it.Change, m.flash)
+	}
+	if m.top().view != runsView {
+		t.Errorf("left :runs for %s", m.top().view.name)
+	}
+}
