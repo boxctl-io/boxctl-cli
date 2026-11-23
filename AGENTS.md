@@ -586,6 +586,15 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   A harness with only a `model.json` (`!harness.rules()`) never replaces
   an unattended run's rules: `withRules` loads the built-in in its place
   with its model (`harness.modelFrom` names where that came from).
+- `cmd/harnesses.go` — the harness catalog: `boxctl harness ls` and the
+  board's `:harnesses` list the built-in pr-only (embedded; a directory of
+  your own named `pr-only` replaces it) and every directory under
+  `~/.boxctl/harness`, derived from disk the way boxctl-images derives its
+  catalog from each `images/<name>/image.json`. A harness describes itself
+  in an optional `harness.json` (`label`, `description`; never copied to
+  the box), else the description is its CLAUDE.md's first line; a directory
+  `loadHarness` rejects lists as unusable. `harness` is in
+  `commandsWithoutLogin`: it only reads local files.
 - `cmd/claudemodel.go` — `claude --model/--effort`: passed to claude on
   the box as its own `--model`/`--effort` flags (`modelChoice.args`,
   prepended to the passthrough args: the goal runner's `claude -p` line

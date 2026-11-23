@@ -1,0 +1,4 @@
+{
+  "label": "PR only",
+  "description": "Built-in for unattended runs: work on a branch, open a pull request, never merge or force-push"
+}
