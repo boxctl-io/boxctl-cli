@@ -8,7 +8,7 @@ expose and destroy boxes, and run Claude Code on one, without
 opening the dashboard.
 
 ```bash
-curl -sLS https://boxctl.io/get.sh | bash   # install
+curl -fsSL https://boxctl.io/get.sh | bash  # install
 boxctl login                                # sign in and click Approve in your browser
 boxctl create my-box                        # boot a box
 boxctl ssh my-box                           # get a shell
@@ -53,15 +53,32 @@ repo), which the web dashboard (`boxctl-web`) talks to as well.
 Linux and macOS (install script, latest tagged release):
 
 ```bash
-curl -sLS https://boxctl.io/get.sh | bash
-sudo install boxctl /usr/local/bin/
+curl -fsSL https://boxctl.io/get.sh | bash
 ```
 
-Windows (x64 and ARM64): download `boxctl-windows-amd64.zip` or
+The script verifies the download against the release's checksums, installs
+`~/.local/bin/boxctl`, adds that directory to your `PATH` in your shell's rc
+file if needed, sets up tab completion, and ends by printing the version it
+installed and how old that build is. Run it again to update. Don't run it
+with `sudo`: it installs into your home directory, so it refuses to run under
+`sudo` from your own account (plain root, as in a container or CI, is fine).
+Any other `boxctl` on your `PATH` -- such as the `/usr/local/bin` copy earlier
+versions of the script had you `sudo install` -- is named at the end; remove
+it, or it may keep running instead. `BOXCTL_INSTALL_DIR` picks another
+directory and `BOXCTL_VERSION` a release tag (`BOXCTL_VERSION=v0.5.0`).
+
+It also adds `bx` as a short name, a link beside the binary: `bx ls` is
+`boxctl ls`, with the same tab completion. That only happens when the name is
+free -- a `bx` anywhere on your `PATH` that is something else (IBM's old cloud
+CLI was called that) is left alone, and the script says so. Set
+`BOXCTL_NO_BX=1` to skip it. Not on Windows, where Git Bash's `ln` would make
+a copy instead of a link.
+
+Windows (x64 and ARM64): the same script works from Git Bash and installs
+`boxctl.exe` the same way. Or download `boxctl-windows-amd64.zip` or
 `boxctl-windows-arm64.zip` from the [releases
 page](https://github.com/boxctl-io/boxctl-cli/releases) and put `boxctl.exe` on your
-`PATH`. In Git Bash the install script above works too; it leaves `boxctl.exe`
-in the current directory. The `edge` prerelease below has both zips as well.
+`PATH`. The `edge` prerelease below has both zips as well.
 
 macOS: the same install script works. The macOS binaries aren't signed or
 notarized yet, which doesn't matter when installing with `curl` as above; a
@@ -73,9 +90,12 @@ binary downloaded through a browser gets quarantined, so clear it with
 To install or update to the `edge` build, an unsigned binary rebuilt from the tip of `main` on every push (Windows: `boxctl-windows-amd64.zip` and `boxctl-windows-arm64.zip` on the [edge release](https://github.com/boxctl-io/boxctl-cli/releases/tag/edge)):
 
 ```bash
-curl -sLS https://boxctl.io/get-edge.sh | bash
-sudo install boxctl /usr/local/bin/
+curl -fsSL https://boxctl.io/get-edge.sh | bash
 ```
+
+That is `get.sh` with `BOXCTL_VERSION=edge`. The edge assets are replaced a
+minute or two after each push, so the build age it prints tells you whether
+you caught the newest one; run it again if not.
 
 Or build from source:
 
@@ -85,10 +105,11 @@ go build -o boxctl .
 
 #### Shell completion
 
-`get.sh` and `get-edge.sh` also install tab completion for your login
+`get.sh` (and so `get-edge.sh`) also installs tab completion for your login
 shell (bash, zsh or fish) -- subcommands, flags, and your own box names
 for `ssh`/`port-forward`/`rm`/`pause`/`resume`/`download`, fetched live from the API
-(`boxctl resume mig<TAB>`). Set `BOXCTL_NO_COMPLETION=1` to skip that.
+(`boxctl resume mig<TAB>`), and for `bx` too when it added that name. Set
+`BOXCTL_NO_COMPLETION=1` to skip that.
 To set it up by hand instead, e.g. after building from source:
 
 ```bash
