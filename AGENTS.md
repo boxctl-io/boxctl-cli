@@ -502,7 +502,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   the CLI on top of goal runs, instead of its own runner, SQLite and
   harness. It was `boxctl queue`/`:queue` until the split; there is no
   alias. `internal/backlog` is the state (`~/.boxctl/backlog.json`, one item per line
-  (`encode`), written only through `Update`, which holds `backlog.json.lock`) and `Decide`, the
+  (`encode`), written only through `Update`, which holds `backlog.json.lock`; its `version` is `backlog.Version`, which a new field of `Backlog`/`Item`/`Run` must bump -- `TestVersionPinsFields` fails until it does -- since a boxctl finding a newer version refuses the file instead of saving it without the fields it doesn't know) and `Decide`, the
   pure engine: one pass's observations (every box's `run_status` from one
   `List`, each PR from one GraphQL query) in, state changes made and
   actions out -- tested as tables, keep it free of I/O. The
