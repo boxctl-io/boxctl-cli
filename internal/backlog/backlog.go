@@ -225,9 +225,12 @@ var DefaultLimits = Limits{Global: 2, PerRepo: 2}
 
 // Backlog is the file.
 type Backlog struct {
-	Next   int     `json:"next"`
-	Items  []*Item `json:"items"`
-	Limits Limits  `json:"limits"`
+	// Version is the file's format (the Version constant of the boxctl
+	// that last wrote it); 0 is a file from before there was one.
+	Version int     `json:"version,omitempty"`
+	Next    int     `json:"next"`
+	Items   []*Item `json:"items"`
+	Limits  Limits  `json:"limits"`
 	// Backoff holds off new runs after boxctl refused a box (the account's
 	// limit, or no room on the fleet), until it passes.
 	Backoff    time.Time `json:"backoff,omitempty"`
@@ -285,7 +288,18 @@ func Path() (string, error) {
 	return filepath.Join(home, ".boxctl", "backlog.json"), nil
 }
 
+// Version is the backlog file's format. Bump it whenever a field is added
+// to (or removed from) Backlog, Item or Run -- TestVersionPinsFields fails
+// until you do. A boxctl finding a newer version refuses the file instead
+// of saving it: it would drop the fields it doesn't know (a change you
+// requested, say) and decide on the rest with older rules.
+const Version = 1
+
+// ErrNewer is Load's error for a file a newer boxctl wrote.
+var ErrNewer = errors.New("written by a newer boxctl")
+
 // Load reads the backlog at path; an empty one when there's no file yet.
+// A file from a newer boxctl (a later Version) is refused with ErrNewer.
 func Load(path string) (*Backlog, error) {
 	q := &Backlog{Limits: DefaultLimits}
 	data, err := os.ReadFile(path)
@@ -298,6 +312,9 @@ func Load(path string) (*Backlog, error) {
 	if err := json.Unmarshal(data, q); err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
+	if q.Version > Version {
+		return nil, fmt.Errorf("%s was %w (format %d; this one knows %d): quit this boxctl and run the newer one, or update it", path, ErrNewer, q.Version, Version)
+	}
 	if q.Limits.Global < 1 {
 		q.Limits.Global = DefaultLimits.Global
 	}
@@ -309,6 +326,7 @@ func Load(path string) (*Backlog, error) {
 
 // save writes q to path atomically (a temporary file, then a rename).
 func save(path string, q *Backlog) error {
+	q.Version = Version
 	data, err := encode(q)
 	if err != nil {
 		return err
