@@ -636,7 +636,7 @@ func goalLogs(ctx context.Context, name string, follow bool) error {
 	var out io.Writer = os.Stdout
 	var fm *logFormatter
 	if !claudeLogsRaw {
-		fm = &logFormatter{w: os.Stdout}
+		fm = &logFormatter{w: os.Stdout, color: useColor()}
 		out = fm
 	}
 	err = box.streamTo(ctx, logsScript(follow), out)
