@@ -23,6 +23,15 @@ type logFormatter struct {
 	buf      []byte
 	tools    map[string]string
 	lastText string
+	color    bool // ANSI styling, for a terminal
+}
+
+// paint wraps s in an ANSI style when colour is on.
+func (f *logFormatter) paint(code, s string) string {
+	if !f.color {
+		return s
+	}
+	return "\033[" + code + "m" + s + "\033[0m"
 }
 
 func (f *logFormatter) Write(p []byte) (int, error) {
@@ -90,7 +99,7 @@ func (f *logFormatter) formatLine(line string) string {
 	switch ev.Type {
 	case "system":
 		if ev.Subtype == "init" {
-			return fmt.Sprintf("── session started (%s)\n", ev.Model)
+			return f.paint("1;36", fmt.Sprintf("── session started (%s)", ev.Model)) + "\n"
 		}
 		return ""
 	case "assistant", "user":
@@ -111,25 +120,25 @@ func (f *logFormatter) formatLine(line string) string {
 					f.tools = map[string]string{}
 				}
 				f.tools[bl.ID] = bl.Name
-				fmt.Fprintf(&b, "▶ %s %s\n", bl.Name, toolSummary(bl.Input))
+				fmt.Fprintf(&b, "%s %s %s\n", f.paint("36", "▶"), f.paint("1", bl.Name), f.paint("2", toolSummary(bl.Input)))
 			case "tool_result":
-				mark := "  ✔ "
+				mark := "  " + f.paint("32", "✔") + " "
 				if bl.IsError {
-					mark = "  ✘ "
+					mark = "  " + f.paint("31", "✘") + " "
 				}
 				if name := f.tools[bl.ToolUseID]; name != "" {
-					mark += name + ": "
+					mark += f.paint("1", name) + ": "
 				}
-				b.WriteString(mark + truncateLine(resultText(bl.Content), 200) + "\n")
+				b.WriteString(mark + f.paint("2", truncateLine(resultText(bl.Content), 200)) + "\n")
 			}
 		}
 		return b.String()
 	case "result":
-		mark := "✔"
+		mark, code := "✔", "1;32"
 		if ev.IsError || (ev.Subtype != "" && ev.Subtype != "success") {
-			mark = "✘"
+			mark, code = "✘", "1;31"
 		}
-		s := fmt.Sprintf("── %s %s after %d turns, %ds, $%.2f\n", mark, ev.Subtype, ev.NumTurns, ev.DurationMS/1000, ev.CostUSD)
+		s := f.paint(code, fmt.Sprintf("── %s %s after %d turns, %ds, $%.2f", mark, ev.Subtype, ev.NumTurns, ev.DurationMS/1000, ev.CostUSD)) + "\n"
 		if t := strings.TrimSpace(ev.Result); t != "" && t != f.lastText {
 			s += t + "\n"
 		}

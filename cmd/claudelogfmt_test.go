@@ -46,3 +46,18 @@ All done.
 		t.Error("the final text is repeated")
 	}
 }
+
+func TestLogFormatterColor(t *testing.T) {
+	in := `{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"a.txt"}}]},"session_id":"s"}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"x","is_error":true}]},"session_id":"s"}
+`
+	var out bytes.Buffer
+	f := &logFormatter{w: &out, color: true}
+	_, _ = f.Write([]byte(in))
+	got := out.String()
+	for _, w := range []string{"\033[36m▶\033[0m", "\033[1mRead\033[0m", "\033[31m✘\033[0m"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("missing %q in %q", w, got)
+		}
+	}
+}
