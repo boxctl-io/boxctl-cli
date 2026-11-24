@@ -160,7 +160,8 @@ func describePR(repo string, p ghPR) []string {
 		lines = append(lines, kv("Updated", stamp(p.UpdatedAt)+" ("+age(p.UpdatedAt)+" ago)"))
 	}
 	if b := strings.TrimSpace(p.Body); b != "" {
-		lines = append(lines, "", b)
+		lines = append(lines, "")
+		lines = append(lines, markdownLines(strings.Split(b, "\n"), 60)...)
 	}
 	lines = append(lines, "", "g asks Claude to do something on this PR's branch, unattended on a new box",
 		"(`boxctl claude --repo "+repo+" --pr "+strconv.Itoa(p.Number)+" --goal ...`): a status summary, a fix, a review.")

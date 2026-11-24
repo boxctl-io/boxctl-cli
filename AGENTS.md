@@ -297,6 +297,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   are skipped. Tests: `scpArgs`/parser/`fetchEvidence` with a fake `ssh`,
   and `cp_sshd_test.go` against a throwaway localhost `sshd` (skipped
   without it).
+- `cmd/tuimarkdown.go` — `markdownLines`: a small Markdown renderer (headings, bullets, code, inline spans, links) used for `:prs`' describe page's PR body.
 - `cmd/portforward.go` — `port-forward`: a local listener per port spec,
   one `Client.DialPort` WebSocket (`GET /api/vms/{id}/port/{port}`,
   bearer token on the upgrade) per accepted TCP connection, raw bytes
