@@ -599,6 +599,16 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   so enter keeps it and passes no `--harness`; a typed `name@ref` is taken
   as typed (`tuiDialog.typed`). A backlog item keeps it in `Item.Harness`
   and every run of it gets `--harness` (`backlog add --harness` too).
+- `cmd/harnesses.go` — the harness catalog: `boxctl harness ls` and the
+  board's `:harnesses` list every directory under `~/.boxctl/harness` (yours),
+  then the harness repository's main (`harnessesIn`; a name of yours
+  shadows it; an unreachable repository leaves only its own out), derived from disk the way boxctl-images derives its
+  catalog from each `images/<name>/image.json`. A harness describes itself
+  in an optional `harness.json` (`label`, `description`; never copied to
+  the box), else the description is its CLAUDE.md's first line; a directory
+  `loadHarness` rejects lists as unusable. The tui's view is the `harnesscat`
+  resource (`m.catalog`); `harnesses`/`m.harnesses` are the picker's names. `harness` is in
+  `commandsWithoutLogin`: it only reads local files.
 - `cmd/claudemodel.go` — `claude --model/--effort`: passed to claude on
   the box as its own `--model`/`--effort` flags (`modelChoice.args`,
   prepended to the passthrough args: the goal runner's `claude -p` line

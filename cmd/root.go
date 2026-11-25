@@ -61,6 +61,7 @@ var commandsWithoutLogin = map[string]bool{
 	"version":    true,
 	"help":       true,
 	"completion": true,
+	"harness":    true, // reads ~/.boxctl/harness only
 	// cobra's hidden tab-completion commands: a logged-out user should
 	// just get no suggestions, not an error (see completeBoxName).
 	cobra.ShellCompRequestCmd:       true,
