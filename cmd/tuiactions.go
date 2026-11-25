@@ -694,6 +694,14 @@ func (m *tuiModel) pushHelp() {
 // describe pushes the page's box or backup as a describe page.
 func (m tuiModel) describe() (tea.Model, tea.Cmd) {
 	t := m.top()
+	if t.kind == pageTable && t.view == harnessesView {
+		if r := m.currentRow(); r != nil {
+			if h := m.harness(r.key); h != nil {
+				m.push(page{kind: pageText, title: h.Name, lines: describeHarness(*h)})
+			}
+		}
+		return m, nil
+	}
 	if t.kind == pageTable && t.view == prsView {
 		if p := m.currentPR(); p != nil {
 			m.push(page{kind: pageText, title: fmt.Sprintf("%s#%d", m.prsRepo, p.Number), lines: describePR(m.prsRepo, *p)})
@@ -742,6 +750,14 @@ func (m tuiModel) describe() (tea.Model, tea.Cmd) {
 // showJSON pushes the page's box as the API returns it.
 func (m tuiModel) showJSON() (tea.Model, tea.Cmd) {
 	t := m.top()
+	if t.kind == pageTable && t.view == harnessesView {
+		if r := m.currentRow(); r != nil {
+			if h := m.harness(r.key); h != nil {
+				m.push(page{kind: pageText, title: h.Name + ".json", lines: jsonLines(*h)})
+			}
+		}
+		return m, nil
+	}
 	if t.kind == pageTable && t.view == prsView {
 		if p := m.currentPR(); p != nil {
 			m.push(page{kind: pageText, title: fmt.Sprintf("%s#%d.json", m.prsRepo, p.Number), lines: jsonLines(*p)})
