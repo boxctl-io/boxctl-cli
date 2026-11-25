@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/charmbracelet/x/ansi"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1060,5 +1061,18 @@ func TestTUIMarkAndDeleteBoxes(t *testing.T) {
 	}
 	if len(m.marked) != 0 || len(*calls) != 2 {
 		t.Errorf("marked=%v calls=%v", m.marked, *calls)
+	}
+}
+
+func TestMarkdownLines(t *testing.T) {
+	got := markdownLines(strings.Split("# Title\n<!-- hidden -->\n- one `x` **b**\n- [x] done\n```\ncode **no**\n```\n> q\nsee [a](http://u)", "\n"), 20)
+	want := []string{"Title", "", "• one x b", "☑ done", "    code **no**", "▎ q", "see a (http://u)"}
+	if len(got) != len(want) {
+		t.Fatalf("got %q", got)
+	}
+	for i := range want {
+		if ansi.Strip(got[i]) != want[i] {
+			t.Errorf("line %d: %q, want %q", i, ansi.Strip(got[i]), want[i])
+		}
 	}
 }
