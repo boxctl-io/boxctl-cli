@@ -10,21 +10,60 @@ import (
 	"time"
 
 	"github.com/boxctl-io/boxctl-cli/internal/backlog"
+	"github.com/boxctl-io/boxctl-cli/internal/client"
 	"github.com/spf13/cobra"
 )
 
-// `boxctl runs` and boxctl board's :runs: every run of every backlog item, the
-// ones going and the ones that ended, one row each. The rows come from
-// the backlog file (each item keeps its runs), joined to the box listing
-// for how a run that's going is doing.
+// `boxctl runs`: every run, the backlog's and the rest, one row each.
+// A backlog run's row comes from the backlog file (each item keeps its
+// runs), joined to the box listing for how a run that's going is doing.
+// Every other run is a box boxctl claude made outside the backlog, told
+// from its labels and run_status alone, as claude ls does. boxctl
+// board's :runs shows the backlog's.
+//
+// A run has a kind. An unattended run's box is labeled boxctl.run with
+// it (backlog.Kind's: code, ci_fix, conflict_fix, change); an
+// interactive run's with what made its box -- session (an ephemeral
+// run), box (the project's own) or repo (an attended --repo run).
+
+// runInteractive is the kind of a run someone is attached to.
+const runInteractive = "interactive"
+
+// unattendedKind reports whether kind is an unattended run's.
+func unattendedKind(kind string) bool {
+	switch backlog.Kind(kind) {
+	case backlog.Code, backlog.CIFix, backlog.ConflictFix, backlog.Change:
+		return true
+	}
+	return false
+}
+
+// unattendedBox reports whether vm holds an unattended run.
+func unattendedBox(vm client.VM) bool { return unattendedKind(vm.Labels["boxctl.run"]) }
+
+// runKind is the kind of vm's run, "" for a box boxctl claude didn't make.
+func runKind(vm client.VM) string {
+	switch run := vm.Labels["boxctl.run"]; {
+	case run == "":
+		return ""
+	case unattendedKind(run):
+		return run
+	}
+	return runInteractive
+}
 
 var runsCmd = &cobra.Command{
 	Use:   "runs",
-	Short: "List the backlog's runs, going and ended",
-	Long: `Every run of every backlog item, one row each: the ones going first,
-then the newest first. A run that's going shows how its box says it's
-doing; one that ended shows how it ended (done, failed, lost or killed).
-boxctl board's :runs shows the same, with a run's shell, logs and kill.`,
+	Short: "List every run, going and ended",
+	Long: `Every run, one row each: the backlog's (ITEM is the backlog item) and
+every other run boxctl claude started -- an unattended --task or --issue
+run, or an interactive one -- going first, then the newest first. KIND
+is interactive, code (a new branch, ending in a pull request), or a
+follow-up on a pull request's branch: ci_fix, conflict_fix or change.
+A run that's going shows how its box says it's doing; one that ended
+shows how it ended (done, failed, lost or killed). A run outside the
+backlog is listed while its box is there. boxctl board's :runs shows
+the backlog's runs, with a run's shell, logs and kill.`,
 	Args: cobra.NoArgs,
 	RunE: runRuns,
 }
@@ -44,7 +83,7 @@ type backlogRun struct {
 
 func (r backlogRun) key() string { return fmt.Sprintf("%d/%d", r.it.ID, r.n) }
 
-// cells are the columns of `boxctl runs` and :runs.
+// cells are the columns of :runs (and `boxctl runs`, through allRuns).
 func (r backlogRun) cells() []string {
 	return []string{"#" + strconv.Itoa(r.it.ID), r.it.Repo, string(r.run.Kind), r.run.Box, r.state, age(r.run.Started)}
 }
@@ -99,9 +138,62 @@ func runState(r backlog.Run, boxes map[string]backlog.Box) string {
 	return b.State
 }
 
-// backlogRunJSON is a row of `boxctl runs -o json`.
-type backlogRunJSON struct {
-	Item    int        `json:"item"`
+// runsRow is a row of `boxctl runs`: a backlog run's, or a box's run
+// (item 0).
+type runsRow struct {
+	item                   int
+	repo, kind, box, state string
+	started                time.Time
+	ended                  *time.Time
+	going                  bool
+	err                    string
+}
+
+func (r runsRow) cells() []string {
+	item := "-"
+	if r.item != 0 {
+		item = "#" + strconv.Itoa(r.item)
+	}
+	return []string{item, r.repo, r.kind, r.box, r.state, age(r.started)}
+}
+
+// allRuns are `boxctl runs`' rows: q's runs, and the run of every box in
+// vms that boxctl claude made outside the backlog; going first, then the
+// newest first. vms is nil when the boxes couldn't be listed.
+func allRuns(q *backlog.Backlog, vms []client.VM) []runsRow {
+	var boxes map[string]backlog.Box
+	if vms != nil {
+		boxes = backlogBoxes(vms)
+	}
+	var rows []runsRow
+	for _, r := range backlogRuns(q, boxes, 0) {
+		rows = append(rows, runsRow{item: r.it.ID, repo: r.it.Repo, kind: string(r.run.Kind), box: r.run.Box, state: r.state,
+			started: r.run.Started, ended: r.run.Ended, going: r.run.Ended == nil, err: r.run.Error})
+	}
+	for _, vm := range vms {
+		kind := runKind(vm)
+		if kind == "" || vm.Labels["boxctl.backlog"] != "" {
+			continue
+		}
+		row := runsRow{repo: projectText(vm), kind: kind, box: vm.Name, state: vm.State, started: vm.CreatedAt, going: true}
+		if st, err := parseGoalStatus(vm.RunStatus); err == nil && st != nil && st.Status != "" {
+			row.state, row.going, row.err = st.Status, !st.finished(), st.Error
+		}
+		rows = append(rows, row)
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if a.going != b.going {
+			return a.going
+		}
+		return a.started.After(b.started)
+	})
+	return rows
+}
+
+// runJSON is a row of `boxctl runs -o json`.
+type runJSON struct {
+	Item    int        `json:"item,omitempty"`
 	Repo    string     `json:"repo"`
 	Kind    string     `json:"kind"`
 	Box     string     `json:"box"`
@@ -122,22 +214,21 @@ func runRuns(cmd *cobra.Command, args []string) error {
 	}
 	ctx, cancel := backlogCtx()
 	defer cancel()
-	var boxes map[string]backlog.Box
-	if vms, err := newClient().List(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Listing boxes: %v (runs going show ?)\n", err)
-	} else {
-		boxes = backlogBoxes(vms)
+	vms, err := newClient().List(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Listing boxes: %v (backlog runs going show ?, and runs outside the backlog are missing)\n", err)
+		vms = nil
 	}
-	rows := backlogRuns(q, boxes, 0)
+	rows := allRuns(q, vms)
 	if format == "json" {
-		var out []backlogRunJSON
+		var out []runJSON
 		for _, r := range rows {
-			out = append(out, backlogRunJSON{Item: r.it.ID, Repo: r.it.Repo, Kind: string(r.run.Kind), Box: r.run.Box, State: r.state, Started: r.run.Started, Ended: r.run.Ended, Error: r.run.Error})
+			out = append(out, runJSON{Item: r.item, Repo: r.repo, Kind: r.kind, Box: r.box, State: r.state, Started: r.started, Ended: r.ended, Error: r.err})
 		}
 		return printJSON(out)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(os.Stderr, "No runs yet: boxctl backlog add a goal, and boxctl board or boxctl backlog dispatch starts them.")
+		fmt.Fprintln(os.Stderr, "No runs yet: boxctl claude --task \"...\" starts one, and so do boxctl board and boxctl backlog dispatch for the backlog's tasks.")
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

@@ -94,7 +94,7 @@ func TestResolveModelRefusesUnknownEffort(t *testing.T) {
 	}
 }
 
-// TestGoalRunnerCarriesModel: what runRepo hands the runner for --goal
+// TestGoalRunnerCarriesModel: what runRepo hands the runner for --task
 // --model claude-sonnet-5-5 --effort medium ends up on claude -p's line.
 func TestGoalRunnerCarriesModel(t *testing.T) {
 	setModelFlags(t, "claude-sonnet-5-5", "medium")
@@ -120,7 +120,7 @@ func TestGoalRunnerCarriesModel(t *testing.T) {
 
 func TestSessionCommandCarriesModel(t *testing.T) {
 	c := modelChoice{model: "sonnet", effort: "high"}
-	s := newTaskSession("/root/p", "")
+	s := newWorkspace("/root/p", "")
 	line := s.commandLine("hi", append(c.args(), "--verbose"))
 	if !strings.Contains(line, `claude '--model' 'sonnet' '--effort' 'high' '--verbose' 'hi'`) {
 		t.Errorf("command line = %s", line)
@@ -151,13 +151,13 @@ func TestHarnessModelFile(t *testing.T) {
 func TestModelLabels(t *testing.T) {
 	runModel = &modelChoice{model: "claude-sonnet-5-5", effort: "medium"}
 	t.Cleanup(func() { runModel = nil })
-	got := withModelLabels(map[string]string{"boxctl.run": "goal"})
-	want := map[string]string{"boxctl.run": "goal", labelModel: "claude-sonnet-5-5", labelEffort: "medium"}
+	got := withModelLabels(map[string]string{"boxctl.run": "code"})
+	want := map[string]string{"boxctl.run": "code", labelModel: "claude-sonnet-5-5", labelEffort: "medium"}
 	if !mapsEqual(got, want) {
 		t.Errorf("labels = %v, want %v", got, want)
 	}
 	runModel = &modelChoice{}
-	if got := withModelLabels(map[string]string{"boxctl.run": "goal"}); len(got) != 1 {
+	if got := withModelLabels(map[string]string{"boxctl.run": "code"}); len(got) != 1 {
 		t.Errorf("nothing chosen still labels: %v", got)
 	}
 
@@ -212,8 +212,8 @@ func captureStdout(t *testing.T, fn func()) string {
 
 func TestClaudeListAndStatusShowModel(t *testing.T) {
 	vms := []client.VM{
-		{Name: "goal-x-fix-1", State: "running", Labels: map[string]string{"boxctl.run": "goal", labelModel: "claude-sonnet-5-5", labelEffort: "medium"}},
-		{Name: "goal-x-docs-2", State: "running", Labels: map[string]string{"boxctl.run": "goal"}},
+		{Name: "goal-x-fix-1", State: "running", Labels: map[string]string{"boxctl.run": "code", labelModel: "claude-sonnet-5-5", labelEffort: "medium"}},
+		{Name: "goal-x-docs-2", State: "running", Labels: map[string]string{"boxctl.run": "code"}},
 	}
 	out := captureStdout(t, func() {
 		if err := printBoxes(t.Context(), vms, "table", true, "", true); err != nil {
@@ -263,7 +263,7 @@ func TestInvalidEffortFailsFast(t *testing.T) {
 	t.Setenv(tokenEnv, "tok")
 	newFakeGitHub(t, prOnlyFiles)
 	t.Cleanup(func() {
-		claudeGoal, claudeRepos, claudeEffortFlag, claudeModelFlag, apiURLFlag = "", nil, "", "", ""
+		claudeTask, claudeRepos, claudeEffortFlag, claudeModelFlag, apiURLFlag = "", nil, "", "", ""
 		_ = claudeCmd.Flags().Set("effort", "")
 		rootCmd.SetArgs(nil)
 	})
@@ -275,7 +275,7 @@ func TestInvalidEffortFailsFast(t *testing.T) {
 		{env: "extreme"},
 	} {
 		t.Setenv(envClaudeEffort, tt.env)
-		rootCmd.SetArgs(append([]string{"--api-url", srv.URL, "claude", "--repo", "o/r", "--goal", "x"}, tt.args...))
+		rootCmd.SetArgs(append([]string{"--api-url", srv.URL, "claude", "--repo", "o/r", "--task", "fix the bug"}, tt.args...))
 		err := rootCmd.Execute()
 		if err == nil || !strings.Contains(err.Error(), `effort "extreme"`) {
 			t.Errorf("%v %s: err = %v", tt.args, tt.env, err)
@@ -302,7 +302,7 @@ func TestModelOnlyHarnessKeepsBuiltin(t *testing.T) {
 	t.Setenv(envClaudeModel, "")
 	t.Setenv(envClaudeEffort, "")
 	newFakeGitHub(t, prOnlyFiles)
-	t.Cleanup(func() { claudeHarnessArg, claudeGoal, claudeIssue, claudeHarness = "", "", 0, nil })
+	t.Cleanup(func() { claudeHarnessArg, claudeTask, claudeIssue, claudeHarness = "", "", 0, nil })
 	def := filepath.Join(home, ".boxctl", "harness", "default")
 	writeHarnessFile(t, def, harnessModelFile, `{"model":"sonnet","effort":"low"}`)
 	explicit := t.TempDir()
@@ -320,7 +320,7 @@ func TestModelOnlyHarnessKeepsBuiltin(t *testing.T) {
 		{name: "attended, default", model: "sonnet", from: "harness " + def},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			claudeHarnessArg, claudeGoal, claudeIssue = tt.arg, tt.goal, tt.issue
+			claudeHarnessArg, claudeTask, claudeIssue = tt.arg, tt.goal, tt.issue
 			if err := prepareHarness(context.Background()); err != nil {
 				t.Fatal(err)
 			}
@@ -343,7 +343,7 @@ func TestModelOnlyHarnessKeepsBuiltin(t *testing.T) {
 			}
 		})
 	}
-	claudeHarnessArg, claudeGoal = "none", "fix it"
+	claudeHarnessArg, claudeTask = "none", "fix it"
 	if err := prepareHarness(context.Background()); err != nil || claudeHarness != nil {
 		t.Errorf("--harness none: %+v, %v", claudeHarness, err)
 	}

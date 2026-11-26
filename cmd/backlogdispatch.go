@@ -24,7 +24,7 @@ import (
 // decisions are internal/backlog's (Decide); this is the I/O around them,
 // shared by boxctl board (a pass every backlogPassEvery while it's open) and
 // `boxctl backlog dispatch` (the same, with no screen). A run is `boxctl claude
-// --repo R --box <name> --goal "..."` (plus --pr N for a follow-up) run as
+// --repo R --box <name> --run-kind K --task "..."` (plus --pr N for a follow-up) run as
 // a child process, its output kept in ~/.boxctl/backlog/logs/<box>.log.
 
 // backlogPassEvery paces the passes.
@@ -216,7 +216,7 @@ func destroyBox(ctx context.Context, c *client.Client, name string) error {
 
 // backlogLaunchArgs is the boxctl command line of a run, less the binary.
 func backlogLaunchArgs(a backlog.Action) []string {
-	args := []string{"claude", "--repo", a.Repo, "--box", a.Box, "--backlog-item", strconv.Itoa(a.Item), "--goal", a.Goal}
+	args := []string{"claude", "--repo", a.Repo, "--box", a.Box, "--backlog-item", strconv.Itoa(a.Item), "--run-kind", string(a.Run), "--task", a.Goal}
 	if a.Run != backlog.Code && a.PR != 0 {
 		args = append(args, "--pr", strconv.Itoa(a.PR))
 	}

@@ -168,7 +168,7 @@ func (m tuiModel) topSummary(a *tuiApp) (string, string) {
 			going++
 		}
 	}
-	first := plural(len(m.backlog.Items), "goal")
+	first := plural(len(m.backlog.Items), "task")
 	if needs > 0 {
 		first += fmt.Sprintf(", %d need you", needs)
 	}

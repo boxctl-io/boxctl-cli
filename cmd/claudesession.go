@@ -11,43 +11,43 @@ import (
 	"strings"
 )
 
-// A Claude session on a box: the project's main checkout, or a task --
-// a git worktree of its own beside it (`--task auth` -> <dir>@auth, on
-// branch auth), so several Claudes can work on one project at once
-// without touching each other's files. Each runs in a session of its own
-// in the box's multiplexer (mux: tmux, or herdr).
+// A workspace on a box: the project's main checkout, or a git worktree of
+// its own beside it (`--workspace auth` -> <dir>@auth, on branch auth), so
+// several Claudes can work on one project at once without touching each
+// other's files. Each runs in a session of its own in the box's
+// multiplexer (mux: tmux, or herdr).
 
-var taskNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
+var workspaceNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
 
-type taskSession struct {
-	task string // "" for the main checkout
-	dir  string // where Claude runs on the box
-	name string // its session in the multiplexer: the agent's name, -<task> for a task
+type workspace struct {
+	name    string // "" for the main checkout
+	dir     string // where Claude runs on the box
+	session string // its session in the multiplexer: the agent's name, -<name> for a worktree
 	// shellAfter: when the agent exits, leave a shell in the session
 	// instead of ending it, so it can be started again (--continue).
 	shellAfter bool
 }
 
-func newTaskSession(project, task string) taskSession {
-	if task == "" {
-		return taskSession{dir: project, name: agent.name}
+func newWorkspace(project, name string) workspace {
+	if name == "" {
+		return workspace{dir: project, session: agent.name}
 	}
-	return taskSession{
-		task: task,
-		dir:  taskDir(project, task),
-		name: agent.name + "-" + task,
+	return workspace{
+		name:    name,
+		dir:     workspaceDir(project, name),
+		session: agent.name + "-" + name,
 	}
 }
 
-// taskDir is where a task's worktree lives on the box: beside the
+// workspaceDir is where a workspace's worktree lives on the box: beside the
 // project, not inside it, so it never shows up as untracked files there.
-func taskDir(project, task string) string { return project + "@" + task }
+func workspaceDir(project, name string) string { return project + "@" + name }
 
 // attachHint is the command that comes back to this session.
-func (s taskSession) attachHint(box string) string {
+func (s workspace) attachHint(box string) string {
 	hint := "boxctl " + agent.name + " --box " + box
-	if s.task != "" {
-		hint += " --task " + s.task
+	if s.name != "" {
+		hint += " --workspace " + s.name
 	}
 	return hint
 }
@@ -55,12 +55,12 @@ func (s taskSession) attachHint(box string) string {
 // envFile is where this session's secrets wait for Claude to start: in
 // /run, a tmpfs -- memory, never the box's disk -- read and deleted by the
 // session's command the moment it runs.
-func (s taskSession) envFile() string { return muxRunDir + "/" + s.name + ".env" }
+func (s workspace) envFile() string { return muxRunDir + "/" + s.session + ".env" }
 
 // commandLine is the shell command the multiplexer runs for this session
 // (mux.start): pick up and delete the secrets, then the agent with the
 // prompt and arguments.
-func (s taskSession) commandLine(prompt string, args []string) string {
+func (s workspace) commandLine(prompt string, args []string) string {
 	f := shellQuote(s.envFile())
 	words := []string{
 		"if [ -f " + f + " ]; then . " + f + "; rm -f " + f + "; fi;",
@@ -120,18 +120,18 @@ func resumeHint() string {
 	return ""
 }
 
-// worktreeScript makes the task's worktree if it isn't there: on branch
-// <task>, new from what the box's main checkout has, or the existing
+// worktreeScript makes the workspace's worktree if it isn't there: on
+// branch <name>, new from what the box's main checkout has, or the existing
 // branch of that name.
-func worktreeScript(project, task string) string {
-	p, t := shellQuote(taskDir(project, task)), shellQuote(task)
+func worktreeScript(project, name string) string {
+	p, t := shellQuote(workspaceDir(project, name)), shellQuote(name)
 	return `set -e
 cd ` + shellQuote(project) + `
-[ -d .git ] || { echo "tasks need a git repository" >&2; exit 1; }
+[ -d .git ] || { echo "workspaces need a git repository" >&2; exit 1; }
 if [ ! -d ` + p + ` ]; then
-  if git show-ref --verify -q refs/heads/` + task + `; then git worktree add -q ` + p + ` ` + t + `
+  if git show-ref --verify -q refs/heads/` + name + `; then git worktree add -q ` + p + ` ` + t + `
   else git worktree add -q -b ` + t + ` ` + p + `; fi
-  echo "Made worktree ` + taskDir(project, task) + ` on branch ` + task + `" >&2
+  echo "Made worktree ` + workspaceDir(project, name) + ` on branch ` + name + `" >&2
 fi`
 }
 
@@ -177,7 +177,7 @@ func claudeEnv(mode string) (env, apiKey string, err error) {
 
 // stageClaudeEnv puts env where s's command picks it up, sending it over
 // ssh's stdin -- never on a command line, where ps would show it.
-func stageClaudeEnv(ctx context.Context, box *boxSSH, s taskSession, env string) error {
+func stageClaudeEnv(ctx context.Context, box *boxSSH, s workspace, env string) error {
 	if env == "" {
 		return nil
 	}

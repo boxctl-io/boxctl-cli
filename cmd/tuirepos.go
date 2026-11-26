@@ -23,8 +23,8 @@ import (
 // owner/name` as a child process, the way `s` runs `boxctl ssh`: a
 // fresh box with the repository cloned on a new branch, Claude
 // attached, and the box deleted when Claude quits once its work is on
-// GitHub. `g` asks for a goal and runs `boxctl claude --repo owner/name
-// --goal "..."` the same way: that starts Claude unattended on a new
+// GitHub. `g` asks for a task and runs `boxctl claude --repo owner/name
+// --task "..."` the same way: that starts Claude unattended on a new
 // box and returns, so the flash names the box, whose RUN column in
 // :boxes then follows the run. The list is cached in ~/.boxctl/repos.json, since it hardly
 // changes and a page of 100 repositories takes gh a few seconds:
@@ -197,7 +197,7 @@ var reposView = &tableView{
 	columns:  []column{{"REPO", 'R'}, {"PUSHED", 'P'}, {"LANGUAGE", 'L'}, {"VISIBILITY", 'V'}, {"DESCRIPTION", 'D'}},
 	stateCol: 3,
 	empty:    "No repositories: gh lists the ones its account can reach (gh auth login).",
-	hotkeys:  []hotkey{{"enter", "claude on a new box"}, {"g", "goal run"}, {"a", "add a goal"}, {"p", "open PRs"}, {"d", "describe"}, {"y", "json"}, {"R", "refresh"}},
+	hotkeys:  []hotkey{{"enter", "claude on a new box"}, {"g", "task run"}, {"a", "add a task"}, {"p", "open PRs"}, {"d", "describe"}, {"y", "json"}, {"R", "refresh"}},
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow
 		for _, r := range m.repos {
@@ -258,7 +258,7 @@ func describeRepo(r ghRepo) []string {
 		lines = append(lines, kv("Pushed", stamp(r.PushedAt)+" ("+age(r.PushedAt)+" ago)"))
 	}
 	lines = append(lines, "", "enter starts Claude on a fresh box with it cloned (`"+strings.Join(append([]string{"boxctl"}, claudeRepoArgs(r.FullName, "", "")...), " ")+"`);",
-		"g asks for a goal and runs it unattended there (--goal), ending in a pull request.")
+		"g asks for a task and runs it unattended there (--task), ending in a pull request.")
 	if !r.Permissions.Push {
 		lines = append(lines, "Without push access Claude can't push its branch or open a pull request there.")
 	}
@@ -275,12 +275,12 @@ func (m *tuiModel) repo(name string) *ghRepo {
 	return nil
 }
 
-// claudeRepoArgs is the command line `enter` (or, with a goal, `g`)
+// claudeRepoArgs is the command line `enter` (or, with a task, `g`)
 // runs for repo, less the binary.
 func claudeRepoArgs(repo, goal, harness string) []string {
 	args := []string{"claude", "--repo", repo}
 	if goal != "" {
-		args = append(args, "--goal", goal)
+		args = append(args, "--task", goal)
 	}
 	if harness != "" {
 		args = append(args, "--harness", harness)
@@ -322,14 +322,14 @@ func (m tuiModel) claudeRun(what string, args []string, goal bool) (tea.Model, t
 }
 
 // askGoal asks what Claude should do on repo, then starts it unattended
-// there (`boxctl claude --repo <repo> --goal "..." [--harness h]`).
+// there (`boxctl claude --repo <repo> --task "..." [--harness h]`).
 func (m tuiModel) askGoal(repo, harness string) (tea.Model, tea.Cmd) {
-	cmd := m.promptText("Goal for Claude on "+repo+harnessSuffix(harness), []string{
-		"Claude works on it unattended on a new box (boxctl claude --goal) and opens a pull request.",
+	cmd := m.promptText("Task for Claude on "+repo+harnessSuffix(harness), []string{
+		"Claude works on it unattended on a new box (boxctl claude --task) and opens a pull request.",
 		"boxctl ls, :boxes' RUN column and l on the box follow it.",
 	}, "what to do, e.g. bump Go and fix what breaks", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		if value == "" {
-			return m, m.fail("a goal is needed")
+			return m, m.fail("a task description is needed")
 		}
 		return m.claudeRepo(repo, value, harness)
 	})

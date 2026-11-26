@@ -21,8 +21,8 @@ import (
 const boxRemote = "box"
 
 // wipRef is where fetch snapshots the main checkout's uncommitted work, on
-// the box, before fetching it as box/wip; a task's goes to wipRef-<task>,
-// fetched as box/wip-<task>. (Not wip/<task>: git can't have both a ref
+// the box, before fetching it as box/wip; a worktree's goes to wipRef-<name>,
+// fetched as box/wip-<name>. (Not wip/<name>: git can't have both a ref
 // and a directory of refs by one name.)
 const wipRef = "refs/boxctl/wip"
 
@@ -90,7 +90,7 @@ func claudeFetch(ctx context.Context) error {
 // work as box/*.
 func fetchBox(ctx context.Context, t *claudeGitTarget) error {
 	// Snapshot the uncommitted work of the main checkout and of every
-	// task's worktree: box/wip, box/wip-<task>.
+	// workspace's worktree: box/wip, box/wip-<name>.
 	worktrees, err := boxWorktrees(ctx, t.box, t.dir)
 	if err != nil {
 		return err
@@ -210,26 +210,26 @@ func (g *claudeGitTarget) git(ctx context.Context, args ...string) error {
 	return cmd.Run()
 }
 
-// boxWorktree is the main checkout ("" task) or a task's worktree.
+// boxWorktree is the main checkout ("" name) or a workspace's worktree.
 type boxWorktree struct {
-	task, dir string
+	name, dir string
 }
 
 func (w boxWorktree) wipRef() string {
-	if w.task == "" {
+	if w.name == "" {
 		return wipRef
 	}
-	return wipRef + "-" + w.task
+	return wipRef + "-" + w.name
 }
 
 func (w boxWorktree) wipName() string {
-	if w.task == "" {
+	if w.name == "" {
 		return "wip"
 	}
-	return "wip-" + w.task
+	return "wip-" + w.name
 }
 
-// boxWorktrees lists the project's main checkout and its tasks' worktrees
+// boxWorktrees lists the project's main checkout and its workspaces' worktrees
 // on the box.
 func boxWorktrees(ctx context.Context, box *boxSSH, project string) ([]boxWorktree, error) {
 	out, err := box.output(ctx, "git -C "+shellQuote(project)+" worktree list --porcelain")
@@ -239,8 +239,8 @@ func boxWorktrees(ctx context.Context, box *boxSSH, project string) ([]boxWorktr
 	return parseWorktrees(string(out), project), nil
 }
 
-// parseWorktrees picks the main checkout and the tasks out of `git
-// worktree list --porcelain`: worktrees at <project>@<task>, the only
+// parseWorktrees picks the main checkout and the workspaces out of `git
+// worktree list --porcelain`: worktrees at <project>@<name>, the only
 // ones boxctl makes.
 func parseWorktrees(porcelain, project string) []boxWorktree {
 	worktrees := []boxWorktree{{dir: project}}
@@ -249,9 +249,9 @@ func parseWorktrees(porcelain, project string) []boxWorktree {
 		if !ok {
 			continue
 		}
-		task, ok := strings.CutPrefix(path, project+"@")
-		if ok && taskNamePattern.MatchString(task) {
-			worktrees = append(worktrees, boxWorktree{task: task, dir: path})
+		name, ok := strings.CutPrefix(path, project+"@")
+		if ok && workspaceNamePattern.MatchString(name) {
+			worktrees = append(worktrees, boxWorktree{name: name, dir: path})
 		}
 	}
 	return worktrees

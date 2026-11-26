@@ -16,16 +16,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// boxctl backlog: goals waiting to become pull requests, worked on by
-// unattended `boxctl claude --goal` runs, a few at a time (internal/backlog
+// boxctl backlog: tasks waiting to become pull requests, worked on by
+// unattended `boxctl claude --task` runs, a few at a time (internal/backlog
 // has the rules). boxctl board runs the passes while it's open;
 // `boxctl backlog dispatch` runs them with no screen.
 
 var backlogCmd = &cobra.Command{
 	Use:   "backlog",
-	Short: "Goals for Claude to turn into pull requests, a few at a time",
-	Long: `A backlog of goals, each ending in one pull request. Each one becomes an
-unattended boxctl claude --goal run on a box of its own, a few at a time
+	Short: "Tasks for Claude to turn into pull requests, a few at a time",
+	Long: `A backlog of tasks, each ending in one pull request. Each one becomes an
+unattended boxctl claude --task run on a box of its own, a few at a time
 (boxctl backlog limit), and its pull request is then watched until you merge it:
 
   - CI fails: the failed jobs are re-run once; if they fail again, a
@@ -74,8 +74,8 @@ var (
 )
 
 var backlogAddCmd = &cobra.Command{
-	Use:   "add [--repo owner/name] <goal...>",
-	Short: "Add a goal (- reads it from stdin)",
+	Use:   "add [--repo owner/name] <description...>",
+	Short: "Add a task: its description (- reads it from stdin)",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		goal := strings.TrimSpace(strings.Join(args, " "))
@@ -87,7 +87,7 @@ var backlogAddCmd = &cobra.Command{
 			goal = strings.TrimSpace(data)
 		}
 		if goal == "" {
-			return errors.New("an empty goal")
+			return errors.New("an empty task description")
 		}
 		repo := backlogRepo
 		if repo == "" {
@@ -416,11 +416,11 @@ func runBacklogLs(cmd *cobra.Command, args []string) error {
 		return enc.Encode(items)
 	}
 	if len(items) == 0 {
-		fmt.Fprintln(os.Stderr, "The backlog is empty: boxctl backlog add --repo owner/name \"a goal\".")
+		fmt.Fprintln(os.Stderr, "The backlog is empty: boxctl backlog add --repo owner/name \"a task description\".")
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "ID\tPRI\tREPO\tSTATE\tRUN\tPR\tNOTE\tGOAL")
+	_, _ = fmt.Fprintln(w, "ID\tPRI\tREPO\tSTATE\tRUN\tPR\tNOTE\tTASK")
 	for _, it := range items {
 		_, _ = fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n", it.ID, it.Priority, it.Repo, it.State, backlogRunText(it), backlogPRText(it), truncate(orDash(it.Note), 50), truncate(firstLine(it.Goal), 50))
 	}
@@ -473,7 +473,7 @@ func readAllLimited(f *os.File, max int64) (string, error) {
 		}
 	}
 	if int64(len(buf)) > max {
-		return "", fmt.Errorf("a goal over %d bytes", max)
+		return "", fmt.Errorf("a task description over %d bytes", max)
 	}
 	return string(buf), nil
 }

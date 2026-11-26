@@ -34,10 +34,10 @@ var backlogView = &tableView{
 	name:     "backlog",
 	title:    "Backlog",
 	resource: "backlog",
-	columns:  []column{{"ID", 'I'}, {"PRI", 'P'}, {"REPO", 'R'}, {"STATE", 'S'}, {"RUN", 0}, {"PR", 0}, {"NOTE", 'N'}, {"GOAL", 'G'}},
+	columns:  []column{{"ID", 'I'}, {"PRI", 'P'}, {"REPO", 'R'}, {"STATE", 'S'}, {"RUN", 0}, {"PR", 0}, {"NOTE", 'N'}, {"TASK", 'T'}},
 	stateCol: 3,
-	empty:    "Nothing queued: a queues a goal (here, or on a repository in :repos).",
-	hotkeys: []hotkey{{"a", "add a goal"}, {"c", "request changes"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"1/2/3", "newest/oldest/priority"}, {"L", "slot limit"}, {"o", "open PR"},
+	empty:    "Nothing queued: a queues a task (here, or on a repository in :repos).",
+	hotkeys: []hotkey{{"a", "add a task"}, {"c", "request changes"}, {"m", "merge"}, {"r", "retry"}, {"+/-", "priority"}, {"1/2/3", "newest/oldest/priority"}, {"L", "slot limit"}, {"o", "open PR"},
 		{"l", "run's log"}, {"s", "run's shell"}, {"ctrl-d", "cancel"}, {"enter", "runs"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		if m.backlog == nil {
@@ -257,12 +257,12 @@ func (m tuiModel) handleBacklogKey(key string) (tea.Model, tea.Cmd, bool) {
 	return m, nil, false
 }
 
-// askBacklogRepo asks which repository a new goal is for -- from a list
+// askBacklogRepo asks which repository a new task is for -- from a list
 // that starts at the current item's, so enter alone takes that -- then
-// the goal.
+// the task.
 func (m tuiModel) askBacklogRepo() (tea.Model, tea.Cmd) {
-	cmd := m.prompt("Add a goal: which repository?", []string{
-		"owner/name; the goal is asked next. Type to narrow the list,",
+	cmd := m.prompt("Add a task: which repository?", []string{
+		"owner/name; the task is asked next. Type to narrow the list,",
 		"up/down to select, tab to complete.",
 	}, "owner/name", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		owner, name, err := parseRepo(value)
@@ -355,17 +355,17 @@ func parseBacklogLimit(s string) (int, *int, error) {
 	return n[0], &n[1], nil
 }
 
-// askBacklogGoal asks for a goal on repo and adds it to the backlog,
+// askBacklogGoal asks for a task on repo and adds it to the backlog,
 // its runs to use harness ("" for the default).
 func (m tuiModel) askBacklogGoal(repo, harness string) (tea.Model, tea.Cmd) {
-	cmd := m.promptText("Add a goal on "+repo+harnessSuffix(harness), []string{
-		"It runs unattended (boxctl claude --goal) when a slot is free, and ends in a pull request",
+	cmd := m.promptText("Add a task on "+repo+harnessSuffix(harness), []string{
+		"It runs unattended (boxctl claude --task) when a slot is free, and ends in a pull request",
 		"that :backlog then watches: CI and conflicts get follow-up runs; m merges it once it's green.",
 	}, "what to do, e.g. bump Go and fix what breaks", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		if value == "" {
-			return m, m.fail("a goal is needed")
+			return m, m.fail("a task description is needed")
 		}
-		return m, m.backlogChange("queued a goal on "+repo, func() error {
+		return m, m.backlogChange("queued a task on "+repo, func() error {
 			_, err := addBacklogItem(repo, value, "", harness, 0)
 			return err
 		})
@@ -444,7 +444,7 @@ func describeBacklogItem(it *backlog.Item) []string {
 			lines = append(lines, "     asked: "+firstLine(r.Ask))
 		}
 	}
-	lines = append(lines, "", "Goal")
+	lines = append(lines, "", "Task")
 	for _, l := range strings.Split(strings.TrimSpace(it.Goal), "\n") {
 		lines = append(lines, "  "+l)
 	}

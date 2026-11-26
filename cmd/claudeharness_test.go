@@ -85,10 +85,10 @@ func TestPrepareHarnessChoice(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	gh := newFakeGitHub(t, prOnlyFiles)
-	t.Cleanup(func() { claudeHarnessArg, claudeGoal, claudeIssue, claudeHarness = "", "", 0, nil })
+	t.Cleanup(func() { claudeHarnessArg, claudeTask, claudeIssue, claudeHarness = "", "", 0, nil })
 	pick := func(arg, goal string) *harness {
 		t.Helper()
-		claudeHarnessArg, claudeGoal, claudeIssue = arg, goal, 0
+		claudeHarnessArg, claudeTask, claudeIssue = arg, goal, 0
 		if err := prepareHarness(context.Background()); err != nil {
 			t.Fatal(err)
 		}
@@ -99,13 +99,13 @@ func TestPrepareHarnessChoice(t *testing.T) {
 		t.Error("a plain run with no default gets no harness")
 	}
 	if h := pick("", "fix it"); !isRemotePROnly(h) {
-		t.Errorf("--goal gets the repository's pr-only, got %+v", h)
+		t.Errorf("--task gets the repository's pr-only, got %+v", h)
 	}
 	if pick("none", "fix it") != nil {
 		t.Error("--harness none turns the goal default off")
 	}
 	// --issue is a goal that only names an issue: unattended all the same.
-	claudeHarnessArg, claudeGoal, claudeIssue = "", "", 7
+	claudeHarnessArg, claudeTask, claudeIssue = "", "", 7
 	if err := prepareHarness(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestPrepareHarnessChoice(t *testing.T) {
 	// than run without its guardrail.
 	gh.down.Store(true)
 	_ = os.RemoveAll(filepath.Join(home, ".boxctl", "harness-cache"))
-	claudeHarnessArg, claudeGoal = "", "fix it"
+	claudeHarnessArg, claudeTask = "", "fix it"
 	if err := prepareHarness(context.Background()); err == nil {
 		t.Error("a goal without pr-only should fail")
 	}
@@ -141,7 +141,7 @@ func TestPrepareHarnessChoice(t *testing.T) {
 		t.Errorf("a default directory applies to every run, got %+v", h)
 	}
 	if h := pick("", "fix it"); h == nil || h.dir != def {
-		t.Errorf("your default beats pr-only for --goal, got %+v", h)
+		t.Errorf("your default beats pr-only for --task, got %+v", h)
 	}
 	if pick("none", "") != nil {
 		t.Error("--harness none turns your default off")

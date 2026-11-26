@@ -45,7 +45,7 @@ var dashboardCmd = &cobra.Command{
 	Long: `Serves a dashboard for your boxes on 127.0.0.1 and opens it in your
 browser: the boxes (live, refreshed every 5s), their public URLs, images,
 sizes and backups -- create, pause, resume, keep, expose, delete, restore,
-a --goal run's log, and a terminal on a box in the page itself.
+a --task run's log, and a terminal on a box in the page itself.
 
 It uses this CLI's login; the token stays here. Only this machine can
 reach it, and only with the link it prints. Ctrl-C stops it.`,
@@ -226,8 +226,8 @@ type dashboardBox struct {
 	SizeLabel  string   `json:"size_label"`
 	Age        string   `json:"age"`
 	Rank       int      `json:"rank"`
-	Unfinished bool     `json:"unfinished"` // a --goal run that isn't done: rm's second warning
-	GoalRun    bool     `json:"goal_run"`   // has a log for `logs`
+	Unfinished bool     `json:"unfinished"` // a --task run that isn't done: rm's second warning
+	Unattended bool     `json:"unattended"` // an unattended run: has a log for `logs`
 	Describe   []string `json:"describe"`
 }
 
@@ -250,7 +250,7 @@ func (d *dashboard) boxes(w http.ResponseWriter, r *http.Request) {
 			Age:        age(vm.CreatedAt),
 			Rank:       stateRank(vm.State),
 			Unfinished: len(filterUnfinished([]client.VM{vm}, nil)) > 0,
-			GoalRun:    vm.Labels["boxctl.run"] == "goal",
+			Unattended: unattendedBox(vm),
 			Describe:   describeBox(vm),
 		})
 	}
@@ -347,7 +347,7 @@ func (d *dashboard) unexpose(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{})
 }
 
-// logs is the tui's `l`: a --goal run's log, read over Exec and run
+// logs is the tui's `l`: a --task run's log, read over Exec and run
 // through the same formatter as `boxctl claude logs`.
 func (d *dashboard) logs(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)

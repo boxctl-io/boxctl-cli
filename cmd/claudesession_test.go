@@ -10,19 +10,19 @@ import (
 	"testing"
 )
 
-func TestTaskSession(t *testing.T) {
-	main := newTaskSession("/w/app", "")
-	if main.dir != "/w/app" || main.name != "claude" {
+func TestWorkspace(t *testing.T) {
+	main := newWorkspace("/w/app", "")
+	if main.dir != "/w/app" || main.session != "claude" {
 		t.Errorf("main: %+v", main)
 	}
 	if main.attachHint("claude-app") != "boxctl claude --box claude-app" {
 		t.Error(main.attachHint("claude-app"))
 	}
-	auth := newTaskSession("/w/app", "auth")
-	if auth.dir != "/w/app@auth" || auth.name != "claude-auth" {
-		t.Errorf("task: %+v", auth)
+	auth := newWorkspace("/w/app", "auth")
+	if auth.dir != "/w/app@auth" || auth.session != "claude-auth" {
+		t.Errorf("worktree: %+v", auth)
 	}
-	if auth.attachHint("claude-app") != "boxctl claude --box claude-app --task auth" {
+	if auth.attachHint("claude-app") != "boxctl claude --box claude-app --workspace auth" {
 		t.Error(auth.attachHint("claude-app"))
 	}
 	if auth.envFile() == main.envFile() || !strings.HasPrefix(auth.envFile(), "/run/") {
@@ -35,7 +35,7 @@ func TestTaskSession(t *testing.T) {
 // token in its environment -- never in its arguments.
 func TestSessionCommandTakesItsSecrets(t *testing.T) {
 	root := t.TempDir()
-	s := newTaskSession("/w/app", "auth")
+	s := newWorkspace("/w/app", "auth")
 	envFile := filepath.Join(root, "claude-auth.env")
 	line := strings.ReplaceAll(s.commandLine("", nil), shellQuote(s.envFile()), shellQuote(envFile))
 	write(t, envFile, "export CLAUDE_CODE_OAUTH_TOKEN="+shellQuote("sk-ant-oat01-secret")+"\n")
@@ -142,57 +142,59 @@ func TestWorktreeScript(t *testing.T) {
 	run(t, proj, "git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init")
 
 	sh(t, worktreeScript(proj, "auth"))
-	if gitOut(t, taskDir(proj, "auth"), "branch", "--show-current") != "auth" {
-		t.Fatal("task worktree isn't on branch auth")
+	if gitOut(t, workspaceDir(proj, "auth"), "branch", "--show-current") != "auth" {
+		t.Fatal("workspace worktree isn't on branch auth")
 	}
 	sh(t, worktreeScript(proj, "auth")) // again: already there, no error
 	// An existing branch is checked out, not recreated.
 	run(t, proj, "git", "branch", "billing")
 	sh(t, worktreeScript(proj, "billing"))
-	if gitOut(t, taskDir(proj, "billing"), "branch", "--show-current") != "billing" {
+	if gitOut(t, workspaceDir(proj, "billing"), "branch", "--show-current") != "billing" {
 		t.Fatal("billing worktree")
 	}
 
 	ws := parseWorktrees(gitOut(t, proj, "worktree", "list", "--porcelain"), proj)
-	var tasks []string
+	var names []string
 	for _, w := range ws {
-		tasks = append(tasks, w.task+"="+w.wipName())
+		names = append(names, w.name+"="+w.wipName())
 	}
-	if want := []string{"=wip", "auth=wip-auth", "billing=wip-billing"}; !reflect.DeepEqual(tasks, want) {
-		t.Fatalf("worktrees %v, want %v", tasks, want)
+	if want := []string{"=wip", "auth=wip-auth", "billing=wip-billing"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("worktrees %v, want %v", names, want)
 	}
 	branches := worktreeBranches(gitOut(t, proj, "worktree", "list", "--porcelain"))
-	if branches[taskDir(proj, "auth")] != "auth" {
+	if branches[workspaceDir(proj, "auth")] != "auth" {
 		t.Errorf("branches %v", branches)
 	}
 }
 
-func TestResolveTask(t *testing.T) {
-	prevTask, prevOwn, prevBox, prevProj := claudeTask, claudeOwnBox, claudeBox, claudeProject
-	t.Cleanup(func() { claudeTask, claudeOwnBox, claudeBox, claudeProject = prevTask, prevOwn, prevBox, prevProj })
+func TestResolveWorkspace(t *testing.T) {
+	prevWorkspace, prevOwn, prevBox, prevProj := claudeWorkspace, claudeOwnBox, claudeBox, claudeProject
+	t.Cleanup(func() {
+		claudeWorkspace, claudeOwnBox, claudeBox, claudeProject = prevWorkspace, prevOwn, prevBox, prevProj
+	})
 
 	claudeProject = t.TempDir()
-	claudeTask, claudeOwnBox, claudeBox = "Bad_Name", false, ""
-	if resolveTask() == nil {
-		t.Error("an invalid task name was accepted")
+	claudeWorkspace, claudeOwnBox, claudeBox = "Bad_Name", false, ""
+	if resolveWorkspace() == nil {
+		t.Error("an invalid workspace name was accepted")
 	}
-	claudeTask, claudeOwnBox = "", true
-	if resolveTask() == nil {
-		t.Error("--own-box without --task was accepted")
+	claudeWorkspace, claudeOwnBox = "", true
+	if resolveWorkspace() == nil {
+		t.Error("--own-box without --workspace was accepted")
 	}
-	claudeTask, claudeOwnBox, claudeBox = "auth", true, ""
-	if err := resolveTask(); err != nil {
+	claudeWorkspace, claudeOwnBox, claudeBox = "auth", true, ""
+	if err := resolveWorkspace(); err != nil {
 		t.Fatal(err)
 	}
-	if claudeTask != "" || !strings.HasSuffix(claudeBox, "-auth") || !strings.HasPrefix(claudeBox, "claude-") {
-		t.Errorf("own box: task %q box %q", claudeTask, claudeBox)
+	if claudeWorkspace != "" || !strings.HasSuffix(claudeBox, "-auth") || !strings.HasPrefix(claudeBox, "claude-") {
+		t.Errorf("own box: workspace %q box %q", claudeWorkspace, claudeBox)
 	}
 }
 
 // TestSessionShellAfterExit: a kept box's session runs the agent without
 // exec and ends in a shell, so the session outlives the agent.
 func TestSessionShellAfterExit(t *testing.T) {
-	s := newTaskSession("/w/app", "")
+	s := newWorkspace("/w/app", "")
 	if strings.Contains(s.commandLine("", nil), "exec bash") {
 		t.Error("an ephemeral session must end with the agent")
 	}
@@ -209,7 +211,7 @@ func TestSessionShellAfterExit(t *testing.T) {
 // TestSessionContinueFallsBack: --continue with no conversation to resume
 // starts a fresh session instead of leaving the user at a shell.
 func TestSessionContinueFallsBack(t *testing.T) {
-	s := newTaskSession("/w/app", "")
+	s := newWorkspace("/w/app", "")
 	s.shellAfter = true
 	line := s.commandLine("", []string{"--continue"})
 	if !strings.Contains(line, "claude '--continue' || claude;") {

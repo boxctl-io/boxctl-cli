@@ -72,9 +72,9 @@ func TestRunText(t *testing.T) {
 		{client.VM{}, "-"},
 		{client.VM{Labels: map[string]string{"boxctl.run": "box", "boxctl.agent": "claude"}}, "claude box"},
 		{client.VM{Labels: map[string]string{"boxctl.run": "session"}}, "session"},
-		{client.VM{Labels: map[string]string{"boxctl.run": "goal", "boxctl.agent": "claude"}, RunStatus: []byte(`{"status":"done"}`)}, "claude goal: done"},
-		{client.VM{Labels: map[string]string{"boxctl.run": "goal", "boxctl.agent": "claude"}}, "claude goal: ?"}, // never reported
-		{client.VM{Labels: map[string]string{"boxctl.run": "goal"}, RunStatus: []byte(`not json`)}, "goal: ?"},
+		{client.VM{Labels: map[string]string{"boxctl.run": "code", "boxctl.agent": "claude"}, RunStatus: []byte(`{"status":"done"}`)}, "claude code: done"},
+		{client.VM{Labels: map[string]string{"boxctl.run": "code", "boxctl.agent": "claude"}}, "claude code: ?"}, // never reported
+		{client.VM{Labels: map[string]string{"boxctl.run": "code"}, RunStatus: []byte(`not json`)}, "code: ?"},
 	} {
 		if got := runText(c.vm); got != c.want {
 			t.Errorf("runText(%v) = %q, want %q", c.vm.Labels, got, c.want)
@@ -84,7 +84,7 @@ func TestRunText(t *testing.T) {
 
 func TestRunRow(t *testing.T) {
 	goal := client.VM{
-		Labels:    map[string]string{"boxctl.run": "goal", "boxctl.branch": "boxctl/x-ab12"},
+		Labels:    map[string]string{"boxctl.run": "code", "boxctl.branch": "boxctl/x-ab12"},
 		RunStatus: []byte(`{"status":"done","branch":"boxctl/x-cd34","pr_url":"https://github.com/o/n/pull/7","pr_urls":["https://github.com/o/n/pull/7","https://github.com/o/m/pull/8"],"updated":"` + time.Now().UTC().Format(time.RFC3339) + `"}`),
 	}
 	if g, u, b, pr := runRow(goal); g != "done" || u != "just now" || b != "boxctl/x-cd34" || pr != "https://github.com/o/n/pull/7 (+1 more)" {
@@ -100,7 +100,7 @@ func TestRunRow(t *testing.T) {
 		t.Errorf("repo run: %q", g)
 	}
 	// Only a GitHub URL is shown as one.
-	evil := client.VM{Labels: map[string]string{"boxctl.run": "goal"}, RunStatus: []byte(`{"status":"done","pr_url":"https://evil.example/x"}`)}
+	evil := client.VM{Labels: map[string]string{"boxctl.run": "code"}, RunStatus: []byte(`{"status":"done","pr_url":"https://evil.example/x"}`)}
 	if _, _, _, pr := runRow(evil); pr != "-" {
 		t.Errorf("non-GitHub PR shown: %q", pr)
 	}

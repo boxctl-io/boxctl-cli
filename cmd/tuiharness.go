@@ -53,9 +53,9 @@ func harnessPickChoices(m *tuiModel) []string {
 // next with it: "" for the default a goal run gets anyway, so a launch
 // (or a backlog item) only names a harness that was chosen.
 func (m tuiModel) askHarness(repo string, next func(m tuiModel, harness string) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd) {
-	cmd := m.prompt("Harness for the goal on "+repo, []string{
+	cmd := m.prompt("Harness for the task on "+repo, []string{
 		"Rules for Claude on the box (boxctl claude --harness). Enter keeps the first:",
-		"what a goal gets anyway. Yours under ~/.boxctl/harness, then " + harnessRepo() + "'s;",
+		"what a task gets anyway. Yours under ~/.boxctl/harness, then " + harnessRepo() + "'s;",
 		"name@ref for a branch or tag of it. Up/down to select, tab to complete.",
 	}, "name", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		if value == harnessPickChoices(&m)[0] {

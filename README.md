@@ -39,9 +39,9 @@ boxctl rm my-box                            # done
 | `port-forward`, `expose`, `unexpose` | Reach a box port locally, or publish it on the internet |
 | `backups` (`backups rm`), `restore` | Saved copies of paused boxes; `backups rm` deletes them |
 | `claude` | Run a coding agent on a box with your project |
-| `backlog` | Goals for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:backlog` in the board) |
-| `runs` | Every run of every backlog item, going and ended (`:runs` in the board) |
-| `board` | The tui's other side, the agent work: `:backlog`, `:runs`, `:repos` (your GitHub repos, newest push first; enter starts `claude --repo` on one, `g` a `--goal` run, `a` adds one to the backlog). Once shown, the tui runs the backlog until you quit |
+| `backlog` | Tasks for Claude to turn into pull requests, a few at a time, with CI and conflicts fixed by follow-up runs (`:backlog` in the board) |
+| `runs` | Every run -- the backlog's and every other `boxctl claude` run, interactive or unattended -- with its kind, going and ended (`:runs` in the board shows the backlog's) |
+| `board` | The tui's other side, the agent work: `:backlog`, `:runs`, `:repos` (your GitHub repos, newest push first; enter starts `claude --repo` on one, `g` a `--task` run, `a` adds one to the backlog). Once shown, the tui runs the backlog until you quit |
 
 Run `boxctl <command> --help` for flags.
 
@@ -130,7 +130,7 @@ export BOXCTL_TOKEN=...           # or skip login: every command uses this over 
 
 boxctl ls                         # running boxes
 boxctl ls -a                      # all of them, paused and stopped too
-boxctl ls -p                      # this directory's project's boxes: its own, its runs and goals
+boxctl ls -p                      # this directory's project's boxes: its own and its runs'
 boxctl ls -o json                 # for scripts; images and sizes take -o json too
 boxctl                            # on a terminal: the tui, on a split between the boxes and the board
 boxctl tui                        # straight to the boxes, k9s-style: :boxes/:urls/:images/:sizes/:backups, / filter, s shell, d describe, ctrl-d delete, ? keys
@@ -215,10 +215,10 @@ going in herdr (or tmux, below) and boxctl reconnects once the box is reachable 
 Ctrl-C while it waits keeps the box, to attach again with `--box`. Ctrl-C during
 setup deletes it too. `--keep` uses the project's long-lived box
 (`claude-<directory>`) instead, as described below; `--box`, `--detach`
-and `--task` imply it.
+and `--workspace` imply it.
 
 A box you don't name gets a generated one, `<repository>-<slug>-<id>`
-(at most 40 characters): the slug is two or three words of `--goal` or
+(at most 40 characters): the slug is two or three words of `--task` or
 `--prompt`, or an adjective-noun pair like `quiet-otter`, the id four
 random characters, and the branch Claude works on is `boxctl/<slug>-<id>`,
 so you can tell which box a branch came from; `--box` names it yourself.
@@ -232,16 +232,16 @@ boxctl claude --detach --prompt "..."   # start it without attaching
 boxctl claude --model sonnet --effort medium   # which model, how hard it thinks (below)
 boxctl claude -- --model opus           # arguments for claude itself
 boxctl claude login                     # once: every box's Claude is logged in (below)
-boxctl claude --task auth               # a second Claude, in parallel, on its own branch
-boxctl claude ls                        # this project's tasks and boxes, and every goal run
-boxctl claude status <box> [--wait]     # how a goal run is going, without connecting to it
+boxctl claude --workspace auth          # a second Claude, in parallel, on its own branch
+boxctl claude ls                        # this project's workspaces and their runs, and every unattended run
+boxctl claude status <box> [--wait]     # how a --task run is going, without connecting to it
 boxctl claude --handoff <session-id>    # carry on a local session on the box
 boxctl claude fetch                     # the box's branches and uncommitted work, as box/*
 boxctl claude push                      # this branch to the box
 boxctl claude -R owner/name              # --repo for short: a fresh box with the repo cloned, on a new branch
-boxctl claude --repo owner/name --goal "bump Go to 1.24 and fix what breaks"
-boxctl claude --repo owner/api --repo owner/web --goal "rename the /v1 route"   # several repos, a PR in each
-boxctl claude logs <box> [-f]           # how a --goal run is going
+boxctl claude --repo owner/name --task "bump Go to 1.24 and fix what breaks"
+boxctl claude --repo owner/api --repo owner/web --task "rename the /v1 route"   # several repos, a PR in each
+boxctl claude logs <box> [-f]           # how a --task run is going
 boxctl claude evidence <box> [dir]      # the box's /root/evidence/ -> ./evidence/<box>/, files listed with sizes
 boxctl claude --harness pr-only         # extra rules for the box: CLAUDE.md, managed-settings.json (below)
 ```
@@ -254,11 +254,12 @@ no uncommitted or stashed changes, and every branch pushed (whether a pull
 request was opened doesn't matter). Otherwise it's kept and you're told
 what's left on it; it's kept too if you detach with Claude still running,
 or pass `--keep` (come back with `boxctl claude --box <box>`). With
-`--goal "..."` Claude doesn't wait for you: it runs `claude -p` to the end
+`--task "..."` (a description of the task, at least three words) Claude
+doesn't wait for you: it runs `claude -p` to the end
 in a detached herdr workspace, then opens a pull request with `gh pr create`
-whose body has the goal and a summary. `boxctl claude` prints the box, the
+whose body has the task and a summary. `boxctl claude` prints the box, the
 branch and the `boxctl claude logs <box>` command and returns; closing
-the terminal changes nothing. Without `--repo`, `--goal` uses the git
+the terminal changes nothing. Without `--repo`, `--task` uses the git
 repository of the directory you run it in (its GitHub `origin`). The run's
 status (`running`, `done` or `failed`, with the PR's URL) is kept on the
 box, in `/root/.boxctl/goals/latest/status.json`, and `logs` prints it
@@ -268,7 +269,7 @@ login`, or `--claude-auth api-key`).
 **Several repositories.** Repeat `--repo` (or comma-separate: `--repo a/api,a/web`) to
 work across repositories in one box. They are cloned side by side under
 `/root/workspace`, each on the same new branch, and Claude starts in that
-directory. With `--goal`, Claude opens one pull request in each repository
+directory. With `--task`, Claude opens one pull request in each repository
 it changed, linking them to each other; `status.json` has the first as
 `pr_url` and all of them in `pr_urls`. GitHub only; private repositories
 work too, as long as the box's GitHub token covers every one. The
@@ -302,11 +303,11 @@ managed settings are a guardrail against mistakes, not against a
 determined agent -- the real boundary is the credentials (`--github store`
 with a one-repository fine-grained token, and branch protection on
 `main` so nothing merges without review). Deny rules do hold under
-`--goal`'s `--dangerously-skip-permissions`: on a real box (Claude Code
+`--task`'s `--dangerously-skip-permissions`: on a real box (Claude Code
 2.1.322, `pr-visual`) `gh pr merge`, `git push --force` and `gh pr review
 --approve` were refused while `gh pr view` ran. Only those plain commands
 were tried, not ways around them. (The flag itself: Claude Code refuses it
-as root unless `IS_SANDBOX=1` is set, which the goal runner does.)
+as root unless `IS_SANDBOX=1` is set, which the unattended runner does.)
 
 **Where a named harness comes from.** `--harness <name>` is
 `~/.boxctl/harness/<name>` if you have one, else the `<name>` directory of
@@ -318,16 +319,16 @@ and downloads the repository only for a commit it hasn't got, into
 says so. `BOXCTL_HARNESS_REPO` or `"harness_repo"` in
 `~/.boxctl/config.json` points it at another `owner/name` with the same
 layout. In the tui, `a` (`:backlog`, `:repos`) and `g` (`:repos`, `:prs`) ask
-for the harness before the goal; `boxctl backlog add --harness` does the
+for the harness before the task; `boxctl backlog add --harness` does the
 same from the shell.
 
 **Which harness a run gets.** `--harness none` means none; `--harness
 <dir|name[@ref]>` means that one; otherwise `~/.boxctl/harness/default`, if it
-exists, applies to every run; otherwise a `--goal` run gets
+exists, applies to every run; otherwise a `--task` run gets
 `pr-only` (pull request, never merge) -- it runs unattended with
 `--dangerously-skip-permissions`, so it's the run that most needs a
 guardrail you didn't have to ask for. A harness that is nothing but a
-`model.json` has no rules, so it doesn't stand in for that: a `--goal` or
+`model.json` has no rules, so it doesn't stand in for that: a `--task` or
 `--issue` run with one (default or `--harness`) gets its model *and* the
 `pr-only`, and says so. With no `pr-only` to be had (GitHub unreachable
 and nothing cached), an unattended run stops before any box is made. Anything chosen implicitly is
@@ -343,7 +344,7 @@ repository's `AGENTS.md`: `--harness pr-visual`.
 
 **Model and effort.** `--model <name>` and `--effort <level>` choose the
 model Claude runs on the box and how hard it thinks, for attached runs
-and for `--goal`, `--issue` and `--task` alike. They reach Claude as its
+and for `--task`, `--issue` and `--workspace` alike. They reach Claude as its
 own `claude --model`/`--effort` flags, which work the same for `claude -p`
 and an interactive session and beat the `model`/`effortLevel` of the
 copied `settings.json` without rewriting it. The model name is passed
@@ -373,21 +374,21 @@ the labels of the last session started on it; attaching to a running
 session changes neither, prints no Model line, and warns that `--model`
 and `--effort` only apply to a new session.
 
-**`--github` store, off -- and why a goal needs store.** `store` (the
+**`--github` store, off -- and why a task needs store.** `store` (the
 default) logs a token into the box's `gh`, where it stays until the box
 is destroyed: `BOXCTL_GITHUB_TOKEN` if set -- make it a fine-grained
 token for the repositories involved, with Contents and Pull requests
 read/write and an expiry -- and otherwise the token `gh` has on this
-machine. `off` gives the box nothing. A goal runs after you close your
+machine. `off` gives the box nothing. A task runs after you close your
 terminal and ends by pushing a branch and opening a PR, which it can't do
-without a token; `--goal` therefore refuses `--github off`, and stops
+without a token; `--task` therefore refuses `--github off`, and stops
 before making a box if no token can be found.
 
 **Logging Claude in, once.** `boxctl claude login` runs `claude
 setup-token` here (one browser approval; Pro, Max, Team or Enterprise)
 and saves the long-lived token it makes -- in the macOS Keychain, or
 `~/.boxctl/claude/oauth-token` (0600) elsewhere. Every Claude `boxctl
-claude` then starts, on any box or task, gets it as
+claude` then starts, on any box or workspace, gets it as
 `CLAUDE_CODE_OAUTH_TOKEN`: sent over ssh's stdin into a 0600 file in the
 box's `/run` (memory, not disk), which the session reads and deletes as
 it starts -- never on a command line, never on the box's disk. The
@@ -398,21 +399,21 @@ requests, so Remote Control and claude.ai connectors need
 api-key` passes `ANTHROPIC_API_KEY` the same way. `boxctl claude logout`
 forgets it. Without a saved token, it falls back to `/login` on the box.
 
-**Several things at once.** `--task <name>` runs another Claude on the
+**Several things at once.** `--workspace <name>` runs another Claude on the
 same box, in a git worktree of its own -- `<dir>@<name>`, on branch
 `<name>`, made from what the box's main checkout has -- in its own herdr
 workspace (or tmux session), so the two never touch each other's files. Starting one takes
-seconds: no copy, no install, no login. `boxctl claude --task auth`
+seconds: no copy, no install, no login. `boxctl claude --workspace auth`
 again attaches to it; `boxctl claude ls` lists them all, running or
-not. They share the box's CPU, memory and ports -- `--task <name>
---own-box` gives a task a box of its own (`claude-<project>-<name>`)
-instead. `fetch` brings each task's branch back, and its uncommitted
+not. They share the box's CPU, memory and ports -- `--workspace <name>
+--own-box` gives a workspace a box of its own (`claude-<project>-<name>`)
+instead. `fetch` brings each workspace's branch back, and its uncommitted
 work as `box/wip-<name>`.
 
 A new box boots the image for the project's language when the server has
 one (`claude-agent-go` for a Go project), else `claude-agent`, and says
 which and why (`image claude-agent-go (go.mod in boxctl-io/boxctl-cli)`).
-`--goal`/`--issue`/`--repo` runs read the stack from the current
+`--task`/`--issue`/`--repo` runs read the stack from the current
 directory when they have no `--repo`, else from the first `--repo`'s root
 files on GitHub (one short API call; any error means `claude-agent`).
 `--image` overrides it.
@@ -436,7 +437,7 @@ on the box.
 [herdr](https://herdr.dev) by default: a terminal workspace manager
 made for coding agents, installed on the box the first time (its own
 installer, to `/usr/local/bin`). The box runs one herdr server, and each
-session -- the main checkout, every `--task`, a `--goal` run -- is a
+session -- the main checkout, every `--workspace`, a `--task` run -- is a
 workspace of it labeled with the session's name, so an attached herdr
 shows every Claude on the box in its sidebar, marked working, blocked or
 idle, and `boxctl claude ls` shows that state in its ACTIVE column.
@@ -506,9 +507,9 @@ tunneled by `boxctl ssh-proxy`.
 
 ## The backlog (`boxctl backlog`)
 
-A backlog of goals, each ending in one pull request, worked on a few at a
-time by unattended `boxctl claude --goal` runs, each on a box of its own.
-Once a goal has its pull request, the backlog watches it until you merge it:
+A backlog of tasks, each ending in one pull request, worked on a few at a
+time by unattended `boxctl claude --task` runs, each on a box of its own.
+Once a task has its pull request, the backlog watches it until you merge it:
 
 - **CI fails:** the failed GitHub Actions jobs are re-run once (a flake
   costs nothing more). If they fail again on the same commit, a
@@ -526,23 +527,23 @@ Once a goal has its pull request, the backlog watches it until you merge it:
 boxctl backlog add --repo owner/name "bump Go to 1.26 and fix what breaks"
 boxctl backlog add -p 5 "add --json to ls"     # this directory's repo; higher priority starts first
 boxctl backlog                                 # ID, state, run, PR, what it's waiting for
-boxctl runs                                    # every run: item, kind, box, how it's going or ended
+boxctl runs                                    # every run, the backlog's and the rest: item, kind, box, how it's going or ended
 boxctl backlog limit --global 4 --per-repo 2   # runs at once (default 2: an account's box limit)
 boxctl backlog merge 3 ; boxctl backlog cancel 4 ; boxctl backlog retry 5
 boxctl backlog dispatch                        # run the passes here with no screen
 ```
 
 Each kind of run (`code`, `ci_fix`, `conflict_fix`) gets 2 attempts per
-goal; after that it's "needs you", and `retry` adds one more of each.
+task; after that it's "needs you", and `retry` adds one more of each.
 A box that disappears or stops reporting isn't charged, up to 3 in a row.
-A goal's boxes are deleted when its next run starts, and when it's merged
+A task's boxes are deleted when its next run starts, and when it's merged
 or cancelled. A refused box (your account's limit, a full fleet) costs
 nothing; new runs wait 2 minutes.
 
-In `boxctl board`, `:backlog` is the goals and `:runs` the runs, going and
-ended; enter on a goal shows its runs. In `:runs`, `s` and `l` open a
+In `boxctl board`, `:backlog` is the tasks and `:runs` their runs, going and
+ended; enter on a task shows its runs. In `:runs`, `s` and `l` open a
 run's shell and log while its box is there, and ctrl-d kills a run
-that's going: its box is deleted and the goal waits for you (it counts
+that's going: its box is deleted and the task waits for you (it counts
 as one of that kind's attempts), with nothing more started for it until
 `r` retries it.
 
@@ -556,7 +557,7 @@ already on boxes carry on while neither is open. The backlog lives in
 `q<id>-<kind>-<n>`.
 
 It's the boxctl-orchestrator design (boxctl-orchestrator's
-`docs/designs/boxctl_orchestrator.md`), built into the CLI on top of goal
+`docs/designs/boxctl_orchestrator.md`), built into the CLI on top of unattended
 runs.
 
 ## Copying files (`cp`)
@@ -715,7 +716,7 @@ report a vulnerability (security@boxctl.io).
 - **GitHub (`--github`).** `store` (default) keeps a token on the box
   until it's destroyed -- in backups taken meanwhile too. It's
   `BOXCTL_GITHUB_TOKEN` if set, else your `gh auth token`, which usually
-  reaches every repository you can: for anything long-lived, or a goal
+  reaches every repository you can: for anything long-lived, or a task
   box the idle reaper parks rather than deletes, set `BOXCTL_GITHUB_TOKEN`
   to a fine-grained, single-repository token. `off` gives the box nothing.
 - **Where things live.** Locally: `~/.boxctl/config.json` (`0600`), the

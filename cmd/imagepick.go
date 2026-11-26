@@ -185,7 +185,7 @@ func repoRootFiles(ctx context.Context, repo, token string) ([]string, error) {
 	return names, nil
 }
 
-// runImage is the image for a --repo/--goal run: --image, else the stack
+// runImage is the image for a --repo/--task run: --image, else the stack
 // of the local project (dir, when the run has no --repo), else of the
 // first repository's root files from GitHub, else the default. Any
 // error on the way means the default.

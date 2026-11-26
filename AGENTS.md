@@ -118,7 +118,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   boxes is counted as a line). It stays as printed on a pipe, in JSON,
   for rows that scrolled off, or if the table would wrap. `-p` keeps this directory's
   project's boxes (`inProject`: labeled with its directory or GitHub
-  repository; unlabeled, named `<agent>-<dir>[-<task>]`), `-l` filters
+  repository; unlabeled, named `<agent>-<dir>[-<workspace>]`), `-l` filters
   by label on the server, and `-o wide` adds IP, PROVIDER, READY and
   BRANCH. `printBoxes` is the listing itself, shared with `claude ls`.
 - `cmd/tui.go`, `tuiapp.go`, `tuiviews.go`, `tuiactions.go`, `tuirender.go`,
@@ -153,7 +153,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   --repo owner/name` as a child process the way `s` runs `boxctl ssh`
   (its stderr teed into a tail buffer so the flash can say why it
   failed), and `g` asking for a goal and running the same with
-  `--goal` -- that returns once Claude is started, so its stdout is
+  `--task` -- that returns once Claude is started, so its stdout is
   teed too and `goalBoxName` reads the box off the `Box:` line for the
   flash. In that view `g` isn't "top" (home still is). The list is cached in `~/.boxctl/repos.json`: opening the
   view shows the cache at once and asks GitHub in the background only
@@ -162,7 +162,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `list`, is where that lives). `cmd/tuiprs.go` is `:prs`, a board view of one repository's open
   pull requests (`gh pr list`, on demand like `:repos`): the cwd's GitHub origin,
   `:prs owner/name`, or `p` on a repo in `:repos`; `g` runs `boxctl claude
-  --repo R --pr N --goal ...` on the PR's branch, `o` opens it. It has no
+  --repo R --pr N --task ...` on the PR's branch, `o` opens it. It has no
   one-key screen (`p` is pause in `:runs`). `tuihome.go` is the page the tui starts
   on (`pageHome`, always the bottom of the stack: `openView` puts a view
   on top of it, so esc from a view goes home, as does `:home`): a tile
@@ -242,12 +242,13 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   confirmation unless `--force`), runs the action concurrently, prints a
   ✔/✘ line per box, and fails if any box failed.
 - `cmd/rm.go` — besides its own confirmation, `rm` (and `rm all`) asks a
-  second one (`confirmUnfinished`) for a `--goal` run that isn't done:
-  `boxctl.run=goal` and a `run_status` that isn't `done` -- running,
+  second one (`confirmUnfinished`) for a `--task` run that isn't done:
+  `boxctl.run=<an unattended kind>` (`unattendedBox`) and a `run_status`
+  that isn't `done` -- running,
   failed, never reported (`?`) or unparseable all count, since the box may
   hold work nobody has fetched (`filterUnfinished` is the tested
   selection). It reads the one `List` call's `run_status`, never the box.
-  Done runs and boxes that aren't goal runs (no status to check) go
+  Done runs and boxes that aren't unattended runs (no status to check) go
   through on the usual single confirmation; `--force` skips both, and a
   failed `List` only warns.
 - `cmd/ssh.go` — the one non-trivial command: mints a terminal ticket,
@@ -331,7 +332,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   box (boxctl-vms's `docs/plans/claude-on-the-box.md`). By default a run
   is ephemeral (`cmd/claudeephemeral.go`): a new `<dir>-<slug>-<id>`
   box (`cmd/boxname.go`'s `boxName`, also behind `--repo` and a nameless
-  `create`: the slug from `--prompt`/`--goal` or an adjective-noun pair
+  `create`: the slug from `--prompt`/`--task` or an adjective-noun pair
   -- the dashboard's word lists, `boxctl-web`'s `lib/nameGenerator.ts` --
   a fresh id while the name is taken, branch `boxctl/<slug>-<id>`), and `claudeTarget.end` fetches its work as `box/*` (`fetchBox`)
   and deletes it -- keeping it if that fetch fails. In either mode a
@@ -345,7 +346,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   before it's walked, unless `--force` -- run from a folder of
   repositories, it would otherwise upload all of them, and just sizing
   one takes long enough to look hung. `--keep` (implied by
-  `--box`/`--detach`/`--task`, see `ephemeralRun`) creates or
+  `--box`/`--detach`/`--workspace`, see `ephemeralRun`) creates or
   resumes `claude-<dir>`, authorizes `~/.boxctl/claude/id_ed25519` (the
   plugin's key) over `Exec`, then does everything else over real ssh via
   `ssh-proxy` with a ControlMaster: a one-time gzipped tar of the project
@@ -391,8 +392,8 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   every non-alphanumeric character turned into `-` (`claudeProjectKey`);
   it only matches because the project has the same absolute path on the
   box. The transcript is found before any box is touched.
-  `cmd/claudesession.go`: a `taskSession` is the main checkout or a
-  `--task` worktree (`<dir>@<task>`, session `claude-<task>`). Claude's
+  `cmd/claudesession.go`: a `workspace` is the main checkout or a
+  `--workspace` worktree (`<dir>@<name>`, session `claude-<name>`). Claude's
   credentials (`cmd/claudeauth.go`: a `claude setup-token` token in the
   Keychain) go to the box over ssh stdin into `/run/boxctl/<session>.env`
   (tmpfs), which the session's command sources and deletes -- never
@@ -402,10 +403,10 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   start, running check, listing for `claude ls`, install), `herdrMux`
   and `tmuxMux` (`--mux`, `BOXCTL_MUX`, else `boxAgent.mux`: herdr), read from
   the `mux` global that `boxAgent.runs` sets. tmux: one session per
-  `taskSession`, always `tmux ... -t =<name>` -- a bare `-t claude`
+  `workspace`, always `tmux ... -t =<name>` -- a bare `-t claude`
   prefix-matches `claude-auth`. herdr (verified against 0.9.5, which
   `go test` drives with a fake `herdr` on PATH): one headless server per
-  box (its default session), one workspace per `taskSession` labeled
+  box (its default session), one workspace per `workspace` labeled
   with its name, the command typed into the workspace's shell from a
   file in `/run/boxctl` (a typed line is capped by the tty); "running" is
   "a workspace with that label exists", since a pane's exit closes its
@@ -427,16 +428,16 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `claude`'s default), and attached in tmux if there is one. `runRepo` with an existing `--box` doesn't read it:
   the flag or its default decides there. Adding a multiplexer is another
   `multiplexer` in `mux.go` plus `muxNamed`.
-  A box that outlives the run (`--keep`/`--box`/`--detach`/`--task`,
-  i.e. `!claudeTarget.ephemeral`) sets `taskSession.shellAfter`: the
+  A box that outlives the run (`--keep`/`--box`/`--detach`/`--workspace`,
+  i.e. `!claudeTarget.ephemeral`) sets `workspace.shellAfter`: the
   session's command runs the agent without `exec` and ends in `exec
   bash`, so quitting the agent (Ctrl+D twice) leaves a shell in the
   session to run `claude --continue` in, not an ended session. Ephemeral
   runs keep `exec`: `claudeTarget.end` fetches and deletes on the session
   ending.
-- `cmd/claudegoal.go` — `claude --repo owner/name [--goal "..."]` and
+- `cmd/claudegoal.go` — `claude --repo owner/name [--task "..."]` and
   `claude logs <box>`: a new box, the repo cloned (default branch) onto
-  `boxctl/<slug>-<id>`, no local copy. Without `--goal` (and without
+  `boxctl/<slug>-<id>`, no local copy. Without `--task` (and without
   `--keep`/`--box`/`--detach`) the box is ephemeral, but with no checkout
   here to fetch into, `claudeTarget.end` deletes it only when
   `repoWorkPushed` finds Claude quit and nothing only on the box:
@@ -445,7 +446,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   credentials once you've detached). That's why `cloneScript` maps every
   branch in `remote.origin.fetch` -- a `--single-branch` clone's push of
   a new branch leaves no remote-tracking ref otherwise. A PR is not
-  required: a pushed branch is enough. With `--goal`, a detached
+  required: a pushed branch is enough. With `--task`, a detached
   session (`mux.start`) runs a generated `run.sh` (`claude -p`, stream-json, in
   `/root/.boxctl/goals/<id>/`, `latest` symlinked) that records
   `status.json` (running/done/failed, pr_url) -- on the box, because
@@ -456,51 +457,60 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   the box's `run_status`: `claude ls`, `claude status [--wait]` and
   `boxctl ls` read that, running or paused, and never the file
   (`cmd/claudegoalstatus.go`); `claude logs` reads the file. A box from
-  an image without `boxctl-status` shows its goal as `?`. Every box
-  `claude` creates is labeled (`runLabels` for `--repo`/`--goal`:
-  `boxctl.run=repo|goal`, `.repo`, `.branch`, `.issue`, `.agent`;
+  an image without `boxctl-status` shows its status as `?`. Every box
+  `claude` creates is labeled (`runLabels` for `--repo`/`--task`:
+  `boxctl.run=repo` for an attended run, else the run's kind --
+  `code`, `change` with `--pr`, or the backlog's `--run-kind` (hidden):
+  `ci_fix`, `conflict_fix` -- with `.repo`, `.branch`, `.issue`, `.agent`;
   `sessionLabels` for the rest: `boxctl.run=session` for an ephemeral
   run's, `box` for the project's own, with `boxctl.project`, the local
-  directory it holds), and `boxctl label` labels one from before. `claude
-  ls` is the TASK rows of the project's box (the one box it connects
+  directory it holds), and `boxctl label` labels one from before.
+  `runs.go`'s `runKind` reads a box's run kind back: the label itself
+  for an unattended run, `interactive` for `session`/`box`/`repo`. `claude
+  ls` is the WORKSPACE rows of the project's box (the one box it connects
   to, and only running) above `printBoxes` of the project's boxes
-  (`inProject`) plus every goal run's, whatever the cwd -- a goal needs
+  (`inProject`) plus every unattended run's, whatever the cwd -- a task needs
   no local checkout to start from. Neither `ls` nor `logs` pauses or
-  deletes a box: a goal box's `boxctl.pause-when-done=10m` label
+  deletes a box: an unattended run's box's `boxctl.pause-when-done=10m` label
   (`goalPauseWhenDone`) has boxctl-vms's idle reaper pause it once its
   `run_status` is done/failed and it's gone 10 minutes unused.
   Only an `https://github.com/` `pr_url` is shown: the box wrote it.
-  `--issue N` (`issueGoal`) is a goal that only names the repository's
+  `--issue N` (`issueGoal`) is a task that only names the repository's
   issue number: Claude reads it itself with `gh issue view` on the box
   (so it needs the stored token), and the PR body must say `Closes #N`.
-  One repository; `--goal` text is appended as extra instructions; the
+  One repository; `--task` text is appended as extra instructions; the
   box/branch slug is `issue-N`.
-  Goal mode refuses `--github off` (it has to push and open a PR without
+  `--task "..."` must be at least three words (`checkTaskText`, skipped
+  for the backlog's runs): `--task` named a worktree before `--workspace`
+  did, and an old-habit `--task auth` mustn't start an unattended run.
+  An unattended run refuses `--github off` (it has to push and open a PR without
   you) and checks everything, token included, before creating a box. What
   can only fail after that -- the clone of a mistyped `--repo`, the harness,
   the install -- deletes a box this run created (`connectClaudeBox`'s
   `created`), since nothing of the user's is on it yet and a box with no
   run never reports the `run_status` the reaper waits for; a `--box` that
-  already existed is only closed. `--goal`
+  already existed is only closed. `--task`
   without `--repo` takes the cwd's GitHub origin. The runner's `IS_SANDBOX=1`
   is verified against Claude Code 2.1.303: as root it refuses
   `--dangerously-skip-permissions` unless that variable is exactly the
   string `1` (not `true`/`yes`), so keep it that way. Whether the
   harness's deny rules still hold under the flag is not verified.
-- `cmd/claudepr.go` — `claude --repo R --pr N [--goal ...]`: a run on
+- `cmd/claudepr.go` — `claude --repo R --pr N [--task ...]`: a run on
   an open pull request's branch instead of a new one (the follow-up
   `:backlog` starts for a CI or conflict fix). `prBranch` asks GitHub for
   the head branch before any box and refuses a closed PR or a fork's
   branch; `cloneBranchScript` clones it and fetches every branch (so
   `origin/<default>` is there to merge); `prGoalPrompt` says push to it,
   never force-push, open no new PR. The runner is unchanged: its `gh pr
-  list --head` finds the existing PR, so a goal still ends `done`.
+  list --head` finds the existing PR, so a task still ends `done`.
 - `internal/backlog/`, `cmd/backlog.go`, `cmd/backlogdispatch.go`,
   `cmd/tuibacklog.go`, `cmd/runs.go`, `cmd/tuiruns.go` — `boxctl backlog`
-  and `boxctl board`'s `:backlog` (the goals), `boxctl runs` and `:runs` (every
-  run of every goal, going and ended): the boxctl-orchestrator design
+  and `boxctl board`'s `:backlog` (the tasks), `:runs` (every run of every
+  backlog task, going and ended) and `boxctl runs` (those, plus every
+  other run -- unattended or interactive -- from its box's labels and
+  `run_status`, `allRuns`): the boxctl-orchestrator design
   (boxctl-orchestrator's `docs/designs/boxctl_orchestrator.md`) built into
-  the CLI on top of goal runs, instead of its own runner, SQLite and
+  the CLI on top of unattended runs, instead of its own runner, SQLite and
   harness. It was `boxctl queue`/`:queue` until the split; there is no
   alias. `internal/backlog` is the state (`~/.boxctl/backlog.json`, one item per line
   (`encode`), written only through `Update`, which holds `backlog.json.lock`; its `version` is `backlog.Version`, which a new field of `Backlog`/`Item`/`Run` must bump -- `TestVersionPinsFields` fails until it does -- since a boxctl finding a newer version refuses the file instead of saving it without the fields it doesn't know) and `Decide`, the
@@ -510,7 +520,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   `queued` item state and the `q<id>-` box names kept their old words.
   `backlogdispatch.go` is
   the I/O: a run is `boxctl claude --repo R --box q<id>-<kind>-<n>
-  --backlog-item <id> --goal ...` (`--pr N` for a follow-up) run as a child
+  --backlog-item <id> --run-kind <kind> --task ...` (`--pr N` for a follow-up) run as a child
   process, output in `~/.boxctl/backlog/logs/`, and `launching` is what
   keeps a pass from calling a run still being set up lost. A refusal
   (`isRefusal` matches `internal/client`'s `refusalMessage` text) drops
@@ -560,7 +570,7 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
 - `cmd/imagepick.go` — the image of a new agent box: `--image`, else the
   stack (`stacks`, `stackOfFiles`) matched against `/api/images`
   (`pickImage`), else `claude-agent`; `sayNote` prints which and why.
-  `runRepo` (every `--repo`/`--goal`/`--issue` run) passes no local
+  `runRepo` (every `--repo`/`--task`/`--issue` run) passes no local
   directory to `connectClaudeBox`, so it picks through `runImage` and
   hands the result over in `newBoxImage`: the cwd's project when there is
   no `--repo`, else the first repository's root files from GitHub's
@@ -572,13 +582,13 @@ vet`, `gofmt`, and manual verification (`go build -o boxctl . && ./boxctl
   managed settings, which user/project settings can't override);
   `agents/skills/commands` overlay `~/.claude`. Loaded and validated in
   `prepareHarness` before any box exists; applied by `applyHarness` in
-  both the normal and `--repo/--goal` paths, and a failure there aborts
+  both the normal and `--repo/--task` paths, and a failure there aborts
   (unlike the plain config copy, which only warns). It runs right after
   `copyClaudeConfig`, never in parallel with it: both untar into
   `~/.claude`, and the harness's `commands/` etc. must win. Claude is root
   on the box, so this is a guardrail, not a boundary. Which harness:
   `--harness none`, an explicit one, `~/.boxctl/harness/default`, or for
-  an unattended run (`--goal`/`--issue`) `pr-only`, by name. A name
+  an unattended run (`--task`/`--issue`) `pr-only`, by name. A name
   (`resolveHarness`) is a path if one exists, else `name[@ref]`: without a
   ref yours under `~/.boxctl/harness` wins, else it's that top-level
   directory of the public harness repository (`cmd/harnessremote.go`:

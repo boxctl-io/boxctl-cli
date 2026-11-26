@@ -1,6 +1,6 @@
 // Package backlog is the work backlog behind `boxctl backlog` and the tui's
 // :backlog view: goals waiting to become pull requests, each worked on by
-// one unattended `boxctl claude --goal` run at a time, with follow-up
+// one unattended `boxctl claude --task` run at a time, with follow-up
 // runs on the pull request's branch (`--pr`) when its CI fails or it
 // conflicts with its base. It's the boxctl-orchestrator design
 // (boxctl-orchestrator's docs/designs/boxctl_orchestrator.md) built into
@@ -74,7 +74,7 @@ const RunTimeLimit = 3 * time.Hour
 // creating the box, cloning, installing Claude) takes a few minutes.
 const LaunchGrace = 20 * time.Minute
 
-// Run is one `boxctl claude --goal` on one box.
+// Run is one `boxctl claude --task` on one box.
 type Run struct {
 	Kind     Kind       `json:"kind"`
 	Box      string     `json:"box"`

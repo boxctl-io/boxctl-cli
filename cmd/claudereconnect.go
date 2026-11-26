@@ -29,7 +29,7 @@ const reconnectMaxDelay = 15 * time.Second
 // It returns attach's result when the session ends or you detach, nil if
 // the session ended while the connection was down, and errConnectionLost
 // if you gave up waiting (Ctrl-C).
-func reattach(ctx context.Context, box *boxSSH, sess taskSession, attach func() error) error {
+func reattach(ctx context.Context, box *boxSSH, sess workspace, attach func() error) error {
 	for {
 		err := attach()
 		if !errors.Is(err, errConnectionLost) {
@@ -50,7 +50,7 @@ func reattach(ctx context.Context, box *boxSSH, sess taskSession, attach func() 
 // awaitBox waits until the box can be reached again and reports whether
 // sess is still running there. It stops waiting only when ctx is
 // cancelled.
-func awaitBox(ctx context.Context, box *boxSSH, sess taskSession) (running bool, err error) {
+func awaitBox(ctx context.Context, box *boxSSH, sess workspace) (running bool, err error) {
 	// The shared connection rode the same tunnel: start a new one.
 	box.close()
 	sp := startSpinner(fmt.Sprintf("Lost the connection to %s -- reconnecting (Ctrl-C to stop)", bold(box.name)))
@@ -76,7 +76,7 @@ func awaitBox(ctx context.Context, box *boxSSH, sess taskSession) (running bool,
 // sessionAlive reports whether sess is running on the box, or an error if
 // the box can't be reached. Quietly: ssh's and the tunnel's complaints
 // would only repeat, under the spinner, that the network is down.
-func sessionAlive(ctx context.Context, box *boxSSH, sess taskSession) (bool, error) {
+func sessionAlive(ctx context.Context, box *boxSSH, sess workspace) (bool, error) {
 	argv := append(append([]string{"-o", "BatchMode=yes", "-o", "ConnectTimeout=15"}, box.args...),
 		mux.running(sess))
 	err := exec.CommandContext(ctx, "ssh", argv...).Run()

@@ -27,7 +27,7 @@ func tuiFixture() []client.VM {
 		{ID: "2", Name: "web", State: "running", Image: "debian-slim", Size: "small", CreatedAt: now.Add(-2 * time.Hour), Labels: map[string]string{"team": "web"},
 			Ingress: []client.Ingress{{URL: "https://web-abc.boxctl.app", Port: 3000, Status: "active"}}},
 		{ID: "3", Name: "goal-box", State: "running", Image: "claude-agent", CreatedAt: now.Add(-1 * time.Hour),
-			Labels:    map[string]string{"boxctl.run": "goal", "boxctl.agent": "claude", "boxctl.repo": "cdalar/boxctl"},
+			Labels:    map[string]string{"boxctl.run": "code", "boxctl.agent": "claude", "boxctl.repo": "cdalar/boxctl"},
 			RunStatus: json.RawMessage(`{"status":"running"}`)},
 		{ID: "4", Name: "booting", State: "provisioning", CreatedAt: now},
 	}
@@ -60,7 +60,7 @@ func TestTUIRowsSortAndFilter(t *testing.T) {
 	for filter, want := range map[string]string{
 		"WEB":           "web",            // name, case-insensitively
 		"cdalar/boxctl": "goal-box",       // the project column
-		"claude goal":   "goal-box",       // the run column
+		"claude code":   "goal-box",       // the run column
 		"debian":        "web old-paused", // image
 		"nothing":       "",
 	} {
@@ -205,7 +205,7 @@ func TestTUIListAndKeys(t *testing.T) {
 		t.Fatal("still loading after the listing arrived")
 	}
 	view := m.View()
-	for _, want := range []string{"web", "goal-box", "booting", "old-paused", "claude goal: running", "cdalar/boxctl",
+	for _, want := range []string{"web", "goal-box", "booting", "old-paused", "claude code: running", "cdalar/boxctl",
 		"Boxes(all)[4]", "<boxes>", "3 running, 1 paused", "<s>", "shell", "|_.__/"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("view lacks %q:\n%s", want, view)
@@ -457,7 +457,7 @@ func TestTUISSHError(t *testing.T) {
 func TestTUIDescribe(t *testing.T) {
 	vms := tuiFixture()
 	lines := strings.Join(describeBox(vms[2]), "\n")
-	for _, want := range []string{"Name:           goal-box", "State:          running", "Kind:           claude goal: running", "boxctl.repo=cdalar/boxctl"} {
+	for _, want := range []string{"Name:           goal-box", "State:          running", "Kind:           claude code: running", "boxctl.repo=cdalar/boxctl"} {
 		if !strings.Contains(lines, want) {
 			t.Errorf("describe lacks %q:\n%s", want, lines)
 		}
@@ -621,15 +621,15 @@ func TestTUIRepos(t *testing.T) {
 	}
 	// g asks for a goal; an empty one is refused, a typed one runs.
 	m, _ = press(t, m, "g")
-	if m.dialog == nil || m.dialog.title != "Harness for the goal on cdalar/boxctl" {
+	if m.dialog == nil || m.dialog.title != "Harness for the task on cdalar/boxctl" {
 		t.Fatalf("g didn't ask for a harness: %+v", m.dialog)
 	}
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.area == nil || !strings.Contains(m.View(), "Goal for Claude on cdalar/boxctl") {
+	if m.dialog == nil || m.dialog.area == nil || !strings.Contains(m.View(), "Task for Claude on cdalar/boxctl") {
 		t.Fatalf("g didn't ask for a goal:\n%s", m.View())
 	}
 	m, cmd = press(t, m, "enter")
-	if m.dialog != nil || cmd == nil || !strings.Contains(m.flash, "a goal is needed") {
+	if m.dialog != nil || cmd == nil || !strings.Contains(m.flash, "a task description is needed") {
 		t.Errorf("empty goal: dialog=%v flash=%q", m.dialog != nil, m.flash)
 	}
 	m.flash, m.flashErr = "", false
@@ -640,10 +640,10 @@ func TestTUIRepos(t *testing.T) {
 	if m.dialog != nil || cmd == nil || m.flashErr {
 		t.Errorf("goal: dialog=%v cmd=%v flash=%q", m.dialog != nil, cmd != nil, m.flash)
 	}
-	if got := strings.Join(claudeRepoArgs("cdalar/boxctl", "bump Go", ""), " "); got != "claude --repo cdalar/boxctl --goal bump Go" {
+	if got := strings.Join(claudeRepoArgs("cdalar/boxctl", "bump Go", ""), " "); got != "claude --repo cdalar/boxctl --task bump Go" {
 		t.Errorf("args = %q", got)
 	}
-	if got := strings.Join(claudeRepoArgs("cdalar/boxctl", "bump Go", "visual"), " "); got != "claude --repo cdalar/boxctl --goal bump Go --harness visual" {
+	if got := strings.Join(claudeRepoArgs("cdalar/boxctl", "bump Go", "visual"), " "); got != "claude --repo cdalar/boxctl --task bump Go --harness visual" {
 		t.Errorf("args = %q", got)
 	}
 	// A goal longer than the dialog wraps onto the next line: all of
@@ -725,12 +725,12 @@ func TestTUIClaudeDone(t *testing.T) {
 	next, _ = m.Update(tuiClaudeDoneMsg{repo: "cdalar/boxctl", goal: true,
 		stdout: "Box:    goal-boxctl-bump-go-ab12\nBranch: boxctl/bump-go-ab12\nLogs:   boxctl claude logs goal-boxctl-bump-go-ab12 [-f]\n"})
 	m = next.(tuiModel)
-	if m.flashErr || m.flash != "goal on cdalar/boxctl started on goal-boxctl-bump-go-ab12 (l in :boxes for its log)" {
+	if m.flashErr || m.flash != "task on cdalar/boxctl started on goal-boxctl-bump-go-ab12 (l in :boxes for its log)" {
 		t.Errorf("flash = %q", m.flash)
 	}
 	next, _ = m.Update(tuiClaudeDoneMsg{repo: "cdalar/boxctl", goal: true})
 	m = next.(tuiModel)
-	if m.flash != "goal on cdalar/boxctl started" {
+	if m.flash != "task on cdalar/boxctl started" {
 		t.Errorf("flash = %q", m.flash)
 	}
 }
@@ -805,7 +805,7 @@ func TestClaudeSessionArgs(t *testing.T) {
 		labels map[string]string
 		want   string // the args joined, or the error's substring after "!"
 	}{
-		{map[string]string{"boxctl.run": "goal", "boxctl.agent": "claude", "boxctl.repo": "cdalar/boxctl"}, "claude --box b -- --continue"},
+		{map[string]string{"boxctl.run": "code", "boxctl.agent": "claude", "boxctl.repo": "cdalar/boxctl"}, "claude --box b -- --continue"},
 		{map[string]string{"boxctl.run": "repo", "boxctl.agent": "claude"}, "claude --box b"},
 		{map[string]string{"boxctl.run": "box", "boxctl.agent": "claude", "boxctl.project": dir}, "claude --box b --project " + dir},
 		{map[string]string{"boxctl.run": "session", "boxctl.project": dir + "/gone"}, "!isn't on this machine"},
@@ -1000,15 +1000,15 @@ func TestTUIPRs(t *testing.T) {
 			t.Errorf("view lacks %q:\n%s", want, view)
 		}
 	}
-	if got, want := strings.Join(claudePRArgs("acme/web", 7, "status?", ""), " "), "claude --repo acme/web --pr 7 --goal status?"; got != want {
+	if got, want := strings.Join(claudePRArgs("acme/web", 7, "status?", ""), " "), "claude --repo acme/web --pr 7 --task status?"; got != want {
 		t.Errorf("args = %q, want %q", got, want)
 	}
-	if got, want := strings.Join(claudePRArgs("acme/web", 7, "status?", "pr-visual"), " "), "claude --repo acme/web --pr 7 --goal status? --harness pr-visual"; got != want {
+	if got, want := strings.Join(claudePRArgs("acme/web", 7, "status?", "pr-visual"), " "), "claude --repo acme/web --pr 7 --task status? --harness pr-visual"; got != want {
 		t.Errorf("args = %q, want %q", got, want)
 	}
 	// g asks for the harness, then the goal.
 	m, _ = press(t, m, "g")
-	if m.dialog == nil || m.dialog.title != "Harness for the goal on acme/web#7" {
+	if m.dialog == nil || m.dialog.title != "Harness for the task on acme/web#7" {
 		t.Fatalf("g: %+v", m.dialog)
 	}
 	m, _ = press(t, m, "enter")

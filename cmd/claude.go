@@ -53,26 +53,28 @@ const (
 )
 
 var (
-	claudeBox     string
-	claudeSize    string
-	claudeImage   string
-	claudePrompt  string
-	claudeBranch  string // set with a generated box name: the branch it goes with
-	claudeDetach  bool
-	claudeGitHub  string
-	claudeIdle    time.Duration
-	claudeProject string
-	claudeHandoff string
-	claudeTask    string
-	claudeOwnBox  bool
-	claudeAuth    string
-	claudeRepos   []string
-	claudeGoal    string
-	claudeIssue   int
+	claudeBox       string
+	claudeSize      string
+	claudeImage     string
+	claudePrompt    string
+	claudeBranch    string // set with a generated box name: the branch it goes with
+	claudeDetach    bool
+	claudeGitHub    string
+	claudeIdle      time.Duration
+	claudeProject   string
+	claudeHandoff   string
+	claudeWorkspace string
+	claudeOwnBox    bool
+	claudeAuth      string
+	claudeRepos     []string
+	claudeTask      string
+	claudeIssue     int
 	// claudeBacklogItem is the hidden --backlog-item: the backlog's runs label their box with it.
 	claudeBacklogItem int
-	claudeKeep        bool
-	claudeForce       bool
+	// claudeRunKind is the hidden --run-kind: a backlog run's kind (ci_fix, ...), for its box's boxctl.run label.
+	claudeRunKind string
+	claudeKeep    bool
+	claudeForce   bool
 )
 
 var claudeCmd = &cobra.Command{
@@ -96,14 +98,14 @@ it's reconnecting gives up and keeps the box, to come back to with --box.
 --keep uses the project's own box (claude-<project>) instead, and keeps
 it: Claude runs in herdr (herdr.dev), so it keeps going when you detach,
 and boxctl claude --keep comes back to it. herdr is a terminal workspace
-manager made for coding agents that shows every task on the box in one
+manager made for coding agents that shows every workspace on the box in one
 window, each marked working, blocked or idle; Ctrl-b q detaches.
 --mux tmux runs it in tmux instead (Ctrl-b d detaches), BOXCTL_MUX=tmux
 makes that the default, and a box keeps using whichever its sessions
 were started in. The box's
 copy of the project is the one Claude works on: later runs don't copy it
 again, and nothing is synced back -- Claude commits and pushes from the
-box. --box, --detach and --task keep their box too.
+box. --box, --detach and --workspace keep their box too.
 
   boxctl claude                           # a new box, deleted afterwards
   boxctl claude --keep                    # create or reattach to claude-<project>
@@ -111,9 +113,9 @@ box. --box, --detach and --task keep their box too.
   boxctl claude --detach --prompt "..."   # start it, don't attach (kept)
   boxctl claude -- --model opus           # arguments for claude itself
   boxctl claude --repo owner/name         # a fresh box, the repo cloned, on a new branch (-R for short)
-  boxctl claude --goal "bump Go and fix what breaks"   # unattended, ends in a PR
+  boxctl claude --task "bump Go and fix what breaks"   # unattended, ends in a PR
   boxctl claude --repo owner/name --issue 42           # unattended: resolve issue #42, ends in a PR
-  boxctl claude --repo owner/name --pr 7 --goal "make CI pass"   # unattended, on PR #7's branch
+  boxctl claude --repo owner/name --pr 7 --task "make CI pass"   # unattended, on PR #7's branch
 
 The first time, log Claude in on the box with /login: it prints a URL to
 open here and a code to paste back. That login stays on the box.
@@ -128,16 +130,17 @@ on the box either way.
 --repo owner/name needs no local copy (repeat it for several repositories,
 cloned side by side under /root/workspace, a pull request in each): it creates a box, clones the
 repository's default branch and starts Claude on a new branch,
-boxctl/<slug>-<id>. With --goal, Claude instead runs unattended
-(claude -p) until the goal is done and opens a pull request; the command
-prints the box, the branch and how to follow it, and returns. Without
---repo, --goal uses this directory's git repository (its GitHub origin).
+boxctl/<slug>-<id>. With --task "<description>", Claude instead runs
+unattended (claude -p) until the task is done and opens a pull request;
+the command prints the box, the branch and how to follow it, and
+returns. A description needs at least three words. Without --repo,
+--task uses this directory's git repository (its GitHub origin).
 --pr N works on open pull request N's branch instead of a new one (one
 --repo; not a fork's): Claude pushes to it and opens no new pull request
--- with --goal, an unattended follow-up such as a CI or conflict fix.
---issue N is a goal that only names a GitHub issue of the repository: Claude
+-- with --task, an unattended follow-up such as a CI or conflict fix.
+--issue N is a task that only names a GitHub issue of the repository: Claude
 reads it (and its comments) with gh, resolves it, and opens a pull request
-that closes it; --goal then adds instructions to it. The repository is
+that closes it; --task then adds instructions to it. The repository is
 --repo's, or this directory's origin.
 boxctl claude logs <box> shows how it's going.`,
 	RunE: claudeAgent.runs(runClaude),
@@ -146,12 +149,14 @@ boxctl claude logs <box> shows how it's going.`,
 func init() {
 	claudeAgent.addFlags(claudeCmd)
 	claudeCmd.Flags().StringVar(&claudeHandoff, "handoff", "", "continue this local Claude Code session (its ID) on the box")
-	claudeCmd.Flags().StringSliceVarP(&claudeRepos, "repo", "R", nil, "GitHub repository (owner/name) to clone on a new box, on a new boxctl/... branch; repeat or comma-separate for several, cloned side by side (with --goal: default is this directory's origin)")
-	claudeCmd.Flags().StringVar(&claudeHarnessArg, "harness", "", "rules for Claude on the box: a directory (CLAUDE.md, managed-settings.json, agents/ skills/ commands/), or a name[@ref]: yours under ~/.boxctl/harness, else that directory of the harness repository ("+defaultHarnessRepo+", or "+envHarnessRepo+"; e.g. pr-only: pull request, never merge); none for no harness (default: ~/.boxctl/harness/default, else for --goal/--issue pr-only)")
-	claudeCmd.Flags().StringVar(&claudeGoal, "goal", "", "a goal for Claude to carry out unattended, ending in a pull request")
-	claudeCmd.Flags().IntVar(&claudePR, "pr", 0, "work on this open pull request's branch instead of a new one (one --repo): push to it, open no new pull request -- with --goal, a follow-up such as a CI fix")
+	claudeCmd.Flags().StringSliceVarP(&claudeRepos, "repo", "R", nil, "GitHub repository (owner/name) to clone on a new box, on a new boxctl/... branch; repeat or comma-separate for several, cloned side by side (with --task: default is this directory's origin)")
+	claudeCmd.Flags().StringVar(&claudeHarnessArg, "harness", "", "rules for Claude on the box: a directory (CLAUDE.md, managed-settings.json, agents/ skills/ commands/), or a name[@ref]: yours under ~/.boxctl/harness, else that directory of the harness repository ("+defaultHarnessRepo+", or "+envHarnessRepo+"; e.g. pr-only: pull request, never merge); none for no harness (default: ~/.boxctl/harness/default, else for --task/--issue pr-only)")
+	claudeCmd.Flags().StringVar(&claudeTask, "task", "", "a task for Claude to carry out unattended, ending in a pull request: its description, at least three words")
+	claudeCmd.Flags().IntVar(&claudePR, "pr", 0, "work on this open pull request's branch instead of a new one (one --repo): push to it, open no new pull request -- with --task, a follow-up such as a CI fix")
 	claudeCmd.Flags().IntVar(&claudeBacklogItem, "backlog-item", 0, "the boxctl backlog item this run is for (labels its box)")
 	_ = claudeCmd.Flags().MarkHidden("backlog-item")
+	claudeCmd.Flags().StringVar(&claudeRunKind, "run-kind", "", "the kind of the backlog run this is (code, ci_fix, conflict_fix, change; labels its box)")
+	_ = claudeCmd.Flags().MarkHidden("run-kind")
 	claudeCmd.Flags().IntVar(&claudeIssue, "issue", 0, "number of a GitHub issue for Claude to resolve unattended, ending in a pull request that closes it (one repository)")
 	claudeCmd.Flags().StringVar(&claudeAuth, "claude-auth", claudeAuthAuto, "how Claude on the box logs in: auto (the token boxctl claude login saved, else /login), token, login or api-key")
 	_ = claudeCmd.RegisterFlagCompletionFunc("claude-auth", cobra.FixedCompletions([]string{claudeAuthAuto, claudeAuthToken, claudeAuthLogin, claudeAuthAPIKey}, cobra.ShellCompDirectiveNoFileComp))
@@ -162,10 +167,14 @@ func init() {
 }
 
 func runClaude(cmd *cobra.Command, args []string) error {
+	// Before anything else, a harness fetched from GitHub included.
+	if err := checkTaskText(claudeTask); err != nil {
+		return err
+	}
 	if err := prepareHarness(cmd.Context()); err != nil {
 		return err
 	}
-	if len(claudeRepos) > 0 || claudeGoal != "" || claudeIssue != 0 || claudePR != 0 {
+	if len(claudeRepos) > 0 || claudeTask != "" || claudeIssue != 0 || claudePR != 0 {
 		return runRepo(cmd, args)
 	}
 	ctx := cmd.Context()
@@ -202,7 +211,7 @@ func runClaude(cmd *cobra.Command, args []string) error {
 		configErr, harnessErr, setupErr, stateErr error
 		running                                   bool
 	)
-	t, sess, err := openSession(ctx, cmd.Flags().Changed("idle-ttl"), func(box *boxSSH, sess taskSession) {
+	t, sess, err := openSession(ctx, cmd.Flags().Changed("idle-ttl"), func(box *boxSSH, sess workspace) {
 		inParallel(
 			func() {
 				configErr = copyClaudeConfig(ctx, box)
@@ -277,33 +286,33 @@ func checkSessionFlags() error {
 	default:
 		return fmt.Errorf("--github must be %s or %s", githubStore, githubOff)
 	}
-	return resolveTask()
+	return resolveWorkspace()
 }
 
 // openSession is the start of an agent's run, whichever agent: the
 // project's box with the project on it -- copied the first time -- the
-// task's worktree, your git identity and, for --github store, a token.
+// workspace's worktree, your git identity and, for --github store, a token.
 //
 // Unless ephemeralRun says otherwise, the box is a new one of the run's
 // own, which t.end() deletes -- as openSession does itself if it fails.
 //
 // alongside, unless nil, is the agent's own setup on the box, which
 // doesn't need the project there: it runs while the project is put there.
-func openSession(ctx context.Context, setTTL bool, alongside func(*boxSSH, taskSession)) (*claudeTarget, taskSession, error) {
+func openSession(ctx context.Context, setTTL bool, alongside func(*boxSSH, workspace)) (*claudeTarget, workspace, error) {
 	ephemeral := ephemeralRun()
 	if ephemeral {
 		dir, err := projectDir()
 		if err != nil {
-			return nil, taskSession{}, err
+			return nil, workspace{}, err
 		}
 		// A new box always gets the project: check its copy now, not
 		// after the box is made.
 		if err := checkCopy(dir); err != nil {
-			return nil, taskSession{}, err
+			return nil, workspace{}, err
 		}
 		n, err := ephemeralBoxName(ctx, dir)
 		if err != nil {
-			return nil, taskSession{}, err
+			return nil, workspace{}, err
 		}
 		claudeBox, claudeBranch = n.box(), n.branch()
 		newBoxLabels = sessionLabels("session", dir, claudeBranch)
@@ -313,13 +322,13 @@ func openSession(ctx context.Context, setTTL bool, alongside func(*boxSSH, taskS
 		if ephemeral {
 			discardBox(claudeBox)
 		}
-		return nil, taskSession{}, err
+		return nil, workspace{}, err
 	}
 	t.ephemeral = ephemeral
 	if t.needsCopy && !ephemeral {
 		if err := checkCopy(t.dir); err != nil {
 			t.end()
-			return nil, taskSession{}, err
+			return nil, workspace{}, err
 		}
 	}
 	if ephemeral {
@@ -333,7 +342,7 @@ func openSession(ctx context.Context, setTTL bool, alongside func(*boxSSH, taskS
 			sayWarn("%v", err)
 		}
 	}
-	sess := newTaskSession(t.dir, claudeTask)
+	sess := newWorkspace(t.dir, claudeWorkspace)
 	// Each step reports itself above the spinner as it finishes (sayDone).
 	sp := startSpinner("Setting up " + bold(t.name))
 	if alongside == nil {
@@ -351,14 +360,14 @@ func openSession(ctx context.Context, setTTL bool, alongside func(*boxSSH, taskS
 	}
 	if err != nil {
 		t.end()
-		return nil, taskSession{}, err
+		return nil, workspace{}, err
 	}
 	return t, sess, nil
 }
 
 // prepareSession puts the project on t's box, unless it's there, and
 // makes sess's worktree.
-func prepareSession(ctx context.Context, t *claudeTarget, sess taskSession) error {
+func prepareSession(ctx context.Context, t *claudeTarget, sess workspace) error {
 	dir, name, box := t.dir, t.name, t.box
 	// Your git identity doesn't depend on the project being there yet, so
 	// it's set while the clone or copy runs.
@@ -388,15 +397,15 @@ func prepareSession(ctx context.Context, t *claudeTarget, sess taskSession) erro
 			return err
 		}
 		t.needsCopy = false
-	} else if claudeTask == "" {
+	} else if claudeWorkspace == "" {
 		sayNote("%s is already on %s; working with the box's copy (it isn't copied again)", dir, name)
 		if claudeHandoff != "" {
 			sayWarn("Your local changes since then aren't on the box: commit them and run boxctl %s push, or hand off to a fresh box with --box.", agent.name)
 		}
 	}
-	if sess.task != "" {
-		if err := box.run(ctx, worktreeScript(dir, sess.task), nil); err != nil {
-			return fmt.Errorf("making the %s worktree on %s: %w", sess.task, name, err)
+	if sess.name != "" {
+		if err := box.run(ctx, worktreeScript(dir, sess.name), nil); err != nil {
+			return fmt.Errorf("making the %s worktree on %s: %w", sess.name, name, err)
 		}
 	}
 	return nil
@@ -417,13 +426,13 @@ func inParallel(fns ...func()) {
 
 // sessionRunning reports whether sess's agent is running on the box, in
 // its multiplexer.
-func sessionRunning(ctx context.Context, box *boxSSH, sess taskSession) bool {
+func sessionRunning(ctx context.Context, box *boxSSH, sess workspace) bool {
 	return box.run(ctx, mux.running(sess), nil) == nil
 }
 
 // startSession starts the agent in sess with --prompt and args, unless
 // it's running already, and attaches to it unless --detach says not to.
-func startSession(ctx context.Context, t *claudeTarget, sess taskSession, running bool, args []string) error {
+func startSession(ctx context.Context, t *claudeTarget, sess workspace, running bool, args []string) error {
 	if running {
 		if given := newSessionOnly(args); given != "" {
 			fmt.Fprintf(os.Stderr, "%s is already running there; attaching to it (%s only apply to a new session).\n", agent.title, given)
@@ -485,26 +494,27 @@ func newSessionOnly(args []string) string {
 	return strings.Join(given[:len(given)-1], ", ") + " and " + given[len(given)-1]
 }
 
-// resolveTask checks --task and --own-box, and turns --own-box into the
-// task's own box: <agent>-<project>-<task>, where it's the main session.
-func resolveTask() error {
-	if claudeTask != "" && !taskNamePattern.MatchString(claudeTask) {
-		return fmt.Errorf("--task %q: use lowercase letters, digits and dashes, at most 30", claudeTask)
+// resolveWorkspace checks --workspace and --own-box, and turns --own-box
+// into the workspace's own box: <agent>-<project>-<name>, where it's the
+// main checkout.
+func resolveWorkspace() error {
+	if claudeWorkspace != "" && !workspaceNamePattern.MatchString(claudeWorkspace) {
+		return fmt.Errorf("--workspace %q: use lowercase letters, digits and dashes, at most 30", claudeWorkspace)
 	}
 	if !claudeOwnBox {
 		return nil
 	}
-	if claudeTask == "" {
-		return fmt.Errorf("--own-box needs --task")
+	if claudeWorkspace == "" {
+		return fmt.Errorf("--own-box needs --workspace")
 	}
 	if claudeBox == "" {
 		dir, err := projectDir()
 		if err != nil {
 			return err
 		}
-		claudeBox = claudeBoxName(dir) + "-" + claudeTask
+		claudeBox = claudeBoxName(dir) + "-" + claudeWorkspace
 	}
-	claudeTask = ""
+	claudeWorkspace = ""
 	return nil
 }
 
@@ -512,7 +522,7 @@ func resolveTask() error {
 // reconnected (see reattach) rather than taken for the end of the
 // session; errConnectionLost means you gave up on reconnecting, with
 // Claude still running there.
-func attachClaude(ctx context.Context, box *boxSSH, sess taskSession, command string) error {
+func attachClaude(ctx context.Context, box *boxSSH, sess workspace, command string) error {
 	return reattach(ctx, box, sess, func() error { return box.attach(ctx, command) })
 }
 
@@ -530,7 +540,7 @@ type claudeTarget struct {
 	// (repoWorkPushed) instead of fetching them here; sess is the
 	// session that keeps the box while it runs.
 	repoDirs []string
-	sess     taskSession
+	sess     workspace
 }
 
 // openClaudeBox resolves the project and its box (--box, or
@@ -584,7 +594,7 @@ func openClaudeBox(ctx context.Context, create, setTTL bool) (*claudeTarget, err
 func useBoxMux(ctx context.Context, box *boxSSH, dir, name string) error {
 	if name == "" && !muxExplicit && mux.name() != "tmux" {
 		t := tmuxMux{}
-		if box.run(ctx, t.running(newTaskSession(dir, claudeTask)), nil) == nil {
+		if box.run(ctx, t.running(newWorkspace(dir, claudeWorkspace)), nil) == nil {
 			mux = t
 		}
 		return nil
@@ -600,7 +610,7 @@ func useBoxMux(ctx context.Context, box *boxSSH, dir, name string) error {
 		mux = other
 		return nil
 	}
-	if box.run(ctx, other.running(newTaskSession(dir, claudeTask)), nil) == nil {
+	if box.run(ctx, other.running(newWorkspace(dir, claudeWorkspace)), nil) == nil {
 		return fmt.Errorf("%s is running in %s on %s -- attach with --mux %s, or quit it first", agent.title, name, box.name, name)
 	}
 	return nil
