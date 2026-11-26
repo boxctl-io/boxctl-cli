@@ -22,7 +22,7 @@ var runsView = &tableView{
 	resource: "backlog",
 	columns:  []column{{"ITEM", 'I'}, {"REPO", 'R'}, {"KIND", 'K'}, {"BOX", 'B'}, {"STATE", 'S'}, {"AGE", 0}},
 	stateCol: 4,
-	empty:    "No runs yet: a goal in :backlog gets one when there's a slot.",
+	empty:    "No runs yet: a task in :backlog gets one when there's a slot.",
 	hotkeys:  []hotkey{{"s", "shell"}, {"a", "claude"}, {"l", "logs"}, {"p", "pause"}, {"r", "resume"}, {"ctrl-d", "kill"}, {"c", "request changes"}, {"L", "slot limit"}, {"d", "describe"}},
 	rows: func(m *tuiModel) []tableRow {
 		var rows []tableRow

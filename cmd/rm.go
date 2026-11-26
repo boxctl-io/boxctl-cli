@@ -80,9 +80,9 @@ var rmCmd = &cobra.Command{
 }
 
 // unfinishedRuns is the boxes among names (every box, if names is empty)
-// that are a --goal run whose run_status isn't "done": still running,
+// that are a --task run whose run_status isn't "done": still running,
 // failed, or not reporting at all ("?") -- destroying one loses work
-// that hasn't been fetched. Boxes that aren't goal runs have no status
+// that hasn't been fetched. Boxes that aren't unattended runs have no status
 // to check. A failed listing is a warning, never a reason not to destroy.
 func unfinishedRuns(ctx context.Context, c *client.Client, names []string) []client.VM {
 	vms, err := c.List(ctx)
@@ -100,7 +100,7 @@ func filterUnfinished(vms []client.VM, names []string) []client.VM {
 		if len(names) > 0 && !slices.Contains(names, vm.Name) {
 			continue
 		}
-		if vm.Labels["boxctl.run"] != "goal" {
+		if !unattendedBox(vm) {
 			continue
 		}
 		if st, err := parseGoalStatus(vm.RunStatus); err == nil && st != nil && st.Status == "done" {
@@ -112,8 +112,8 @@ func filterUnfinished(vms []client.VM, names []string) []client.VM {
 }
 
 // confirmUnfinished is rm's second confirmation, asked after the usual
-// one and only when a goal run among names isn't done: one line per box
-// with its RUN text ("claude goal: running"), then a separate prompt.
+// one and only when an unattended run among names isn't done: one line per box
+// with its RUN text ("claude code: running"), then a separate prompt.
 // Done runs (and boxes that aren't runs) go straight through, and
 // --force skips it like the first.
 func confirmUnfinished(ctx context.Context, c *client.Client, names []string) bool {

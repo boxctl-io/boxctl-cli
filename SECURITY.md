@@ -74,14 +74,14 @@ is not your normal Claude login. If you think it leaked, make a new one with
 the box is set up, and `gh` becomes git's credential helper there. The
 token is `BOXCTL_GITHUB_TOKEN` if set, and otherwise the output of `gh
 auth token` on your machine. With neither, an attended run goes on with a
-warning and no GitHub access; `--goal`, which must push and open a pull
+warning and no GitHub access; `--task`, which must push and open a pull
 request without you, refuses before making a box. The token reaches the
 box on the standard input of an ssh command, never a command line.
 
 The token stays on the box until the box is destroyed, and is in any
 backup or pause snapshot taken meanwhile. An ephemeral box (the default
-`boxctl claude` run) is deleted when the run ends; a `--keep`, `--task`
-or `--goal` box is not. Your `gh auth token` can usually do whatever you
+`boxctl claude` run) is deleted when the run ends; a `--keep`, `--workspace`
+or `--task` box is not. Your `gh auth token` can usually do whatever you
 can, to every repository you reach, so for those set
 `BOXCTL_GITHUB_TOKEN` to a fine-grained token for the one repository,
 with only Contents and Pull requests read/write, and an expiry.
@@ -91,7 +91,7 @@ with only Contents and Pull requests read/write, and an expiry.
 
 ## Unattended runs
 
-`boxctl claude --goal` runs Claude with `--dangerously-skip-permissions`
+`boxctl claude --task` runs Claude with `--dangerously-skip-permissions`
 (and `IS_SANDBOX=1`, so it will run as root) and nobody to approve
 anything. Treat the box as untrusted and the stored GitHub token as
 reachable by whatever Claude reads or runs there, including content from

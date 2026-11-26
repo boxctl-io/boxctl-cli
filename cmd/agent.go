@@ -9,7 +9,7 @@ import (
 // boxAgent is a coding agent boxctl runs on a box -- `boxctl claude` --
 // or rather the little that is its own: what it's called, and how it's
 // installed and started. The box, the project copy, the multiplexer,
-// tasks, GitHub and fetch/push are agent-independent (the claude*.go
+// workspaces, GitHub and fetch/push are agent-independent (the claude*.go
 // files), and read the running command's agent from `agent`.
 type boxAgent struct {
 	name    string // the subcommand, the box-name prefix and the session's name
@@ -82,8 +82,8 @@ command -v ` + a.bin + ` >/dev/null || { echo "Installing ` + a.product + `..." 
 func (a *boxAgent) addFlags(c *cobra.Command) {
 	c.PersistentFlags().StringVar(&claudeBox, "box", "", a.fill("box to use, kept after the run (default: {agent}-<project directory name> with --keep and for ls/fetch/push; otherwise a new box of the run's own)"))
 	c.PersistentFlags().StringVar(&claudeProject, "project", "", "project directory (default: the git repository, or directory, you're in)")
-	c.PersistentFlags().StringVarP(&claudeTask, "task", "t", "", a.fill("work on a task in parallel: its own worktree (<dir>@<task>, branch <task>) and {Agent} on the box"))
-	c.PersistentFlags().BoolVar(&claudeOwnBox, "own-box", false, a.fill("with --task: give the task a box of its own ({agent}-<project>-<task>) instead of a worktree"))
+	c.PersistentFlags().StringVarP(&claudeWorkspace, "workspace", "w", "", a.fill("work in a workspace of its own, in parallel: a worktree (<dir>@<name>, branch <name>) and {Agent} on the box"))
+	c.PersistentFlags().BoolVar(&claudeOwnBox, "own-box", false, a.fill("with --workspace: give the workspace a box of its own ({agent}-<project>-<name>) instead of a worktree"))
 	c.Flags().StringVarP(&claudeSize, "size", "s", claudeDefaultSize, "size of a box created for this")
 	_ = c.RegisterFlagCompletionFunc("size", completeSize)
 	c.Flags().StringVarP(&claudeImage, "image", "i", "", "image of a box created for this (default: one for the project's language if there is one, else "+claudeDefaultImage+")")
@@ -91,7 +91,7 @@ func (a *boxAgent) addFlags(c *cobra.Command) {
 	c.Flags().BoolVarP(&claudeDetach, "detach", "d", false, a.fill("start {Agent} on the box without attaching to it"))
 	c.Flags().StringVar(&claudeGitHub, "github", githubStore, "GitHub credentials for the box: store (BOXCTL_GITHUB_TOKEN, else your gh token, kept on the box) or off")
 	_ = c.RegisterFlagCompletionFunc("github", cobra.FixedCompletions([]string{githubStore, githubOff}, cobra.ShellCompDirectiveNoFileComp))
-	c.Flags().BoolVarP(&claudeKeep, "keep", "k", false, a.fill("use the project's own box, {agent}-<project>, and keep it -- instead of a new box deleted when the run ends (--box, --detach and --task keep it too)"))
+	c.Flags().BoolVarP(&claudeKeep, "keep", "k", false, a.fill("use the project's own box, {agent}-<project>, and keep it -- instead of a new box deleted when the run ends (--box, --detach and --workspace keep it too)"))
 	c.Flags().BoolVarP(&claudeForce, "force", "f", false, "copy a project directory even if it isn't a git repository")
 	c.Flags().DurationVar(&claudeIdle, "idle-ttl", claudeDefaultIdleTTL, "pause the box after this long unused, 10m to 720h (set on a new box, or on an existing one when given)")
 	c.Flags().StringVar(&muxArg, "mux", a.defaultMux(), a.fill("what keeps {Agent} running on the box between attaches: tmux, or herdr (herdr.dev, installed on the box the first time). "+muxEnv+" sets the default; a box keeps the one its sessions started in"))

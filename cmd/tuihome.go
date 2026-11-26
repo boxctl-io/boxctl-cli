@@ -77,7 +77,7 @@ func (m tuiModel) tileCount(ht homeTile) string {
 				needs++
 			}
 		}
-		s := plural(len(m.backlog.Items), "goal")
+		s := plural(len(m.backlog.Items), "task")
 		if needs > 0 {
 			s += fmt.Sprintf(", %d need you", needs)
 		}
@@ -95,7 +95,7 @@ func (m tuiModel) tileCount(ht homeTile) string {
 	return plural(len(v.rows(&m)), ht.noun)
 }
 
-// plural is "1 box", "3 goals".
+// plural is "1 box", "3 tasks".
 func plural(n int, noun string) string {
 	switch {
 	case n == 1:

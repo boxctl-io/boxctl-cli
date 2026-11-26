@@ -35,7 +35,7 @@ func TestCheckRepoFlags(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "--github off") || !strings.Contains(err.Error(), "BOXCTL_GITHUB_TOKEN") {
 		t.Errorf("goal with off: %v", err)
 	}
-	if err := checkRepoFlags("", githubStore, []string{"--task", "--handoff"}); err == nil || !strings.Contains(err.Error(), "--task, --handoff") {
+	if err := checkRepoFlags("", githubStore, []string{"--workspace", "--handoff"}); err == nil || !strings.Contains(err.Error(), "--workspace, --handoff") {
 		t.Errorf("conflicts: %v", err)
 	}
 }
@@ -296,16 +296,63 @@ func TestSessionLabels(t *testing.T) {
 
 func TestRunLabels(t *testing.T) {
 	agent = claudeAgent
-	got := runLabels(true, []string{"cdalar/onctl-runners"}, "boxctl/issue-29-0ca8", 29)
-	want := map[string]string{"boxctl.run": "goal", "boxctl.agent": "claude", "boxctl.branch": "boxctl/issue-29-0ca8", "boxctl.repo": "cdalar/onctl-runners", "boxctl.issue": "29", "boxctl.pause-when-done": "10m"}
+	got := runLabels("code", []string{"cdalar/onctl-runners"}, "boxctl/issue-29-0ca8", 29)
+	want := map[string]string{"boxctl.run": "code", "boxctl.agent": "claude", "boxctl.branch": "boxctl/issue-29-0ca8", "boxctl.repo": "cdalar/onctl-runners", "boxctl.issue": "29", "boxctl.pause-when-done": "10m"}
 	if !maps.Equal(got, want) {
-		t.Errorf("goal labels = %v, want %v", got, want)
+		t.Errorf("unattended labels = %v, want %v", got, want)
 	}
-	got = runLabels(false, []string{"o/a", "o/b"}, "boxctl/x-1234", 0)
+	got = runLabels("", []string{"o/a", "o/b"}, "boxctl/x-1234", 0)
 	if got["boxctl.run"] != "repo" || got["boxctl.repo"] != "o/a,o/b" || got["boxctl.issue"] != "" || got["boxctl.pause-when-done"] != "" {
 		t.Errorf("repo labels = %v", got)
 	}
-	if got = runLabels(false, []string{strings.Repeat("o/r", 100)}, "b", 0); got["boxctl.repo"] != "" {
+	if got = runLabels("", []string{strings.Repeat("o/r", 100)}, "b", 0); got["boxctl.repo"] != "" {
 		t.Error("an over-long repo label was set")
+	}
+}
+
+// --task used to name a worktree (now --workspace): an old-habit
+// `--task auth` must not start an unattended run told only "auth".
+func TestCheckTaskText(t *testing.T) {
+	for _, short := range []string{"auth", "fix auth", "  fix   auth  "} {
+		err := checkTaskText(short)
+		if err == nil || !strings.Contains(err.Error(), "--workspace") {
+			t.Errorf("checkTaskText(%q) = %v, want a refusal pointing at --workspace", short, err)
+		}
+	}
+	for _, ok := range []string{"", "fix the flaky auth test", "make CI pass"} {
+		if err := checkTaskText(ok); err != nil {
+			t.Errorf("checkTaskText(%q) = %v", ok, err)
+		}
+	}
+	// The backlog's own runs pass its text through whatever its length.
+	t.Cleanup(func() { claudeBacklogItem = 0 })
+	claudeBacklogItem = 3
+	if err := checkTaskText("fix"); err != nil {
+		t.Errorf("a backlog run's task was refused: %v", err)
+	}
+}
+
+// An unattended run's box is labeled with its kind: a backlog follow-up's
+// own (--run-kind), else change on a pull request's branch, else code.
+func TestUnattendedRunKind(t *testing.T) {
+	t.Cleanup(func() { claudeRunKind, claudePR = "", 0 })
+	for _, tt := range []struct {
+		runKind string
+		pr      int
+		want    string
+	}{
+		{"", 0, "code"},
+		{"", 7, "change"},
+		{"ci_fix", 7, "ci_fix"},
+		{"conflict_fix", 7, "conflict_fix"},
+	} {
+		claudeRunKind, claudePR = tt.runKind, tt.pr
+		if got, err := unattendedRunKind(); err != nil || got != tt.want {
+			t.Errorf("--run-kind %q --pr %d: %q, %v; want %q", tt.runKind, tt.pr, got, err, tt.want)
+		}
+	}
+	claudeRunKind = "interactive"
+	if _, err := unattendedRunKind(); err == nil {
+		t.Error("--run-kind interactive was accepted for an unattended run")
 	}
 }

@@ -13,21 +13,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boxctl-io/boxctl-cli/internal/backlog"
 	"github.com/boxctl-io/boxctl-cli/internal/client"
 	"github.com/spf13/cobra"
 )
 
-// boxctl claude --repo owner/name [--goal "..."]: no local copy. A new box,
+// boxctl claude --repo owner/name [--task "..."]: no local copy. A new box,
 // the repository's default branch cloned from GitHub onto a branch of its
 // own (boxctl/<slug>-<id>), and Claude started in it -- attached, or with
-// --goal unattended: `claude -p` in a detached session (tmux or herdr, mux.start), whose runner
+// --task unattended: `claude -p` in a detached session (tmux or herdr, mux.start), whose runner
 // script opens nothing itself but records how the run ended
 // (<goalDir>/status.json: running, done or failed, and the PR's URL) beside
 // the log. Claude opens the pull request with gh.
 //
 // --repo can be given more than once (or comma-separated). The clones then
 // sit side by side under boxWorkspace, Claude starts in that parent
-// directory, every repository gets the same new branch, and a goal ends in
+// directory, every repository gets the same new branch, and a task ends in
 // one pull request per repository Claude changed.
 //
 // The box also reports that status to the server over vsock
@@ -36,7 +37,7 @@ import (
 // box (claudegoalstatus.go). `boxctl claude logs` reads the file.
 //
 // The run outlives the terminal and ends in a pull request, so it needs
-// the GitHub token stored on the box: goal mode refuses --github off.
+// the GitHub token stored on the box: an unattended run refuses --github off.
 
 const boxGoalsDir = "/root/.boxctl/goals"
 
@@ -98,20 +99,39 @@ func repoDirs(repos []string) (dirs []string, workDir string) {
 
 var branchUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
 
-// checkRepoFlags checks what --repo/--goal can't be combined with, before
+// checkRepoFlags checks what --repo/--task can't be combined with, before
 // anything is done. conflicts names the other flags that were given.
-func checkRepoFlags(goal, github string, conflicts []string) error {
+func checkRepoFlags(task, github string, conflicts []string) error {
 	if len(conflicts) > 0 {
-		return fmt.Errorf("--repo/--goal can't be combined with %s", strings.Join(conflicts, ", "))
+		return fmt.Errorf("--repo/--task can't be combined with %s", strings.Join(conflicts, ", "))
 	}
-	if goal != "" && github != githubStore {
-		return fmt.Errorf(`--goal needs a GitHub token on the box to push its branch and open the pull request, so it can't run with --github %s.
+	if task != "" && github != githubStore {
+		return fmt.Errorf(`--task needs a GitHub token on the box to push its branch and open the pull request, so it can't run with --github %s.
 Leave --github at store: the box gets BOXCTL_GITHUB_TOKEN -- ideally a fine-grained token for just the repository (or repositories) involved, with Contents and Pull requests read/write and an expiry (https://github.com/settings/personal-access-tokens/new) -- or else the token gh has on this machine`, github)
 	}
 	return nil
 }
 
-// issueGoal is the goal for resolving issue number of repo, plus any extra
+// taskMinWords is how many words --task needs at least. --task used to name
+// a worktree (now --workspace), so `--task auth` from that habit would
+// start an unattended run told only "auth"; a real task description is
+// longer than that.
+const taskMinWords = 3
+
+// checkTaskText refuses a --task too short to be a task description.
+// The backlog's runs (--backlog-item) are exempt: their task is the
+// backlog's text (or a follow-up's own prompt), not a flag someone typed.
+func checkTaskText(task string) error {
+	if task == "" || claudeBacklogItem != 0 {
+		return nil
+	}
+	if n := len(strings.Fields(task)); n < taskMinWords {
+		return fmt.Errorf("--task %q: describe the task for Claude in at least %d words (it runs unattended and ends in a pull request); for a worktree of its own, use --workspace %s", task, taskMinWords, task)
+	}
+	return nil
+}
+
+// issueGoal is the task for resolving issue number of repo, plus any extra
 // instructions. Claude reads the issue itself, with the token the box has.
 func issueGoal(repo string, number int, extra string) string {
 	g := fmt.Sprintf("Resolve GitHub issue #%d of %s. Read it, and its comments, with gh issue view %d --repo %s --comments; implement what it asks for, and put \"Closes #%d\" in the pull request's body.", number, repo, number, repo, number)
@@ -129,7 +149,7 @@ func goalPrompt(goal string, repos, dirs []string, branch string) string {
 		return goal + `
 
 ---
-You're running unattended on a box, in a clone of ` + repos[0] + ` on the new branch ` + branch + `; nobody can answer questions, so make reasonable decisions and say what you assumed. When the goal is done: commit your work, push the branch (git push -u origin ` + branch + `), and open a pull request with gh pr create. Its body must contain the goal above, word for word, under "## Goal", and a summary of what you changed and anything left undone under "## Summary". If you can't get anywhere, don't open a pull request: say why in your final answer.`
+You're running unattended on a box, in a clone of ` + repos[0] + ` on the new branch ` + branch + `; nobody can answer questions, so make reasonable decisions and say what you assumed. When the task is done: commit your work, push the branch (git push -u origin ` + branch + `), and open a pull request with gh pr create. Its body must contain the task above, word for word, under "## Task", and a summary of what you changed and anything left undone under "## Summary". If you can't get anywhere, don't open a pull request: say why in your final answer.`
 	}
 	var list []string
 	for i, r := range repos {
@@ -141,7 +161,7 @@ You're running unattended on a box, in a clone of ` + repos[0] + ` on the new br
 You're running unattended on a box, in a directory that holds a clone of each of these repositories, every one on the new branch ` + branch + `:
 ` + strings.Join(list, "\n") + `
 
-Nobody can answer questions, so make reasonable decisions and say what you assumed. Change only the repositories the goal needs. When the goal is done, for each repository you changed: commit your work, push the branch (git -C <its directory> push -u origin ` + branch + `), and open a pull request there with gh pr create, run inside that repository's directory. Each pull request's body must contain the goal above, word for word, under "## Goal", and under "## Summary" what you changed in that repository and anything left undone; when the change spans repositories, also link the other pull requests there. Leave a repository you didn't change alone: no commit, no pull request. If you can't get anywhere, don't open any pull request: say why in your final answer.`
+Nobody can answer questions, so make reasonable decisions and say what you assumed. Change only the repositories the task needs. When the task is done, for each repository you changed: commit your work, push the branch (git -C <its directory> push -u origin ` + branch + `), and open a pull request there with gh pr create, run inside that repository's directory. Each pull request's body must contain the task above, word for word, under "## Task", and under "## Summary" what you changed in that repository and anything left undone; when the change spans repositories, also link the other pull requests there. Leave a repository you didn't change alone: no commit, no pull request. If you can't get anywhere, don't open any pull request: say why in your final answer.`
 }
 
 // goalRun is one unattended run.
@@ -240,7 +260,7 @@ func reposToUse() ([]string, error) {
 	if repo := githubRepo(dir); repo != "" {
 		return []string{repo}, nil
 	}
-	return nil, fmt.Errorf("--goal/--issue needs a repository: pass --repo owner/name, or run it in a git repository whose origin is on GitHub (%s isn't)", dir)
+	return nil, fmt.Errorf("--task/--issue needs a repository: pass --repo owner/name, or run it in a git repository whose origin is on GitHub (%s isn't)", dir)
 }
 
 // goalPauseWhenDone is how long a goal's box may go unused once its run
@@ -261,16 +281,18 @@ var (
 	newBoxImageWhy string
 )
 
-// runLabels mark a --repo or --goal run's box for the server
+// runLabels mark a --repo or --task run's box for the server
 // (boxctl-vms's labels), so claude ls finds it -- and the repository,
 // branch and issue it's for -- without guessing from its name or
-// reaching into it. A goal's also asks the server to pause it once the
-// run has finished and nobody has used it for goalPauseWhenDone: nothing
-// else will, `claude ls` and `logs` only read.
-func runLabels(isGoal bool, repos []string, branch string, issue int) map[string]string {
+// reaching into it. kind is an unattended run's (runs.go), labeling
+// boxctl.run with it, "" for an attended --repo run. An unattended run's
+// also asks the server to pause it once the run has finished and nobody
+// has used it for goalPauseWhenDone: nothing else will, `claude ls` and
+// `logs` only read.
+func runLabels(kind string, repos []string, branch string, issue int) map[string]string {
 	labels := map[string]string{"boxctl.run": "repo", "boxctl.agent": agent.name, "boxctl.branch": branch}
-	if isGoal {
-		labels["boxctl.run"] = "goal"
+	if kind != "" {
+		labels["boxctl.run"] = kind
 		labels["boxctl.pause-when-done"] = goalPauseWhenDone
 	}
 	// A label value is at most 255 characters; a workspace of that many
@@ -284,9 +306,25 @@ func runLabels(isGoal bool, repos []string, branch string, issue int) map[string
 	return labels
 }
 
+// unattendedRunKind is the kind of the unattended run this command
+// starts: the hidden --run-kind's (the backlog's follow-ups), else change
+// on --pr's branch, else code.
+func unattendedRunKind() (string, error) {
+	switch {
+	case claudeRunKind != "":
+		if !unattendedKind(claudeRunKind) {
+			return "", fmt.Errorf("--run-kind %q: not an unattended run's kind", claudeRunKind)
+		}
+		return claudeRunKind, nil
+	case claudePR != 0:
+		return string(backlog.Change), nil
+	}
+	return string(backlog.Code), nil
+}
+
 // sessionLabels mark a box an interactive run creates: kind is
 // "session" for an ephemeral run's box, "box" for the project's own
-// (--keep, --box, --task). boxctl.project is the local directory the box
+// (--keep, --box, --workspace). boxctl.project is the local directory the box
 // holds, at the same path, so claude ls can tell a project's run boxes
 // from the list alone -- by name, a boxctl-web box looks like boxctl's --
 // instead of reaching into each one to read its project marker.
@@ -306,7 +344,7 @@ func sessionLabels(kind, dir, branch string) map[string]string {
 
 func runRepo(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-	if len(claudeRepos) == 0 && claudeGoal == "" && claudeIssue == 0 {
+	if len(claudeRepos) == 0 && claudeTask == "" && claudeIssue == 0 {
 		return errors.New("nothing to do")
 	}
 	if claudeIssue < 0 {
@@ -314,16 +352,16 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	}
 	var conflicts []string
 	for flag, set := range map[string]bool{
-		"--task": claudeTask != "", "--own-box": claudeOwnBox, "--handoff": claudeHandoff != "",
+		"--workspace": claudeWorkspace != "", "--own-box": claudeOwnBox, "--handoff": claudeHandoff != "",
 		"--prompt": claudePrompt != "", "--project": claudeProject != "" && len(claudeRepos) > 0,
 	} {
 		if set {
 			conflicts = append(conflicts, flag)
 		}
 	}
-	if claudeGoal != "" || claudeIssue != 0 {
+	if claudeTask != "" || claudeIssue != 0 {
 		if claudeDetach {
-			conflicts = append(conflicts, "--detach (a goal always runs detached)")
+			conflicts = append(conflicts, "--detach (a task always runs detached)")
 		}
 	}
 	repos, err := reposToUse()
@@ -331,12 +369,12 @@ func runRepo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	// goal is what Claude is asked to do unattended; "" for an attended run.
-	goal, slugText := claudeGoal, claudeGoal
+	goal, slugText := claudeTask, claudeTask
 	if claudeIssue != 0 {
 		if len(repos) != 1 {
 			return errors.New("--issue is an issue of one repository: pass a single --repo")
 		}
-		goal = issueGoal(repos[0], claudeIssue, claudeGoal)
+		goal = issueGoal(repos[0], claudeIssue, claudeTask)
 		slugText = fmt.Sprintf("issue %d", claudeIssue)
 	}
 	if err := checkRepoFlags(goal, claudeGitHub, conflicts); err != nil {
@@ -345,7 +383,7 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	if err := checkPRFlags(claudePR, repos, claudeIssue); err != nil {
 		return err
 	}
-	if claudePR != 0 && claudeGoal == "" {
+	if claudePR != 0 && claudeTask == "" {
 		slugText = fmt.Sprintf("pr %d", claudePR)
 	}
 	model, args, err := chooseModel(args)
@@ -366,7 +404,7 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	if len(repos) == 1 {
 		_, namePrefix, _ = strings.Cut(repos[0], "/")
 	}
-	// A goal's box says so, so claude ls finds it from anywhere.
+	// An unattended run's box says so, so claude ls finds it from anywhere.
 	if goal != "" {
 		namePrefix = goalBoxPrefix + namePrefix
 	}
@@ -377,9 +415,9 @@ func runRepo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if goal != "" && env == "" {
-		return errors.New("a goal runs without you, so Claude can't log in on the box with /login: run boxctl claude login once, or use --claude-auth api-key")
+		return errors.New("a task runs without you, so Claude can't log in on the box with /login: run boxctl claude login once, or use --claude-auth api-key")
 	}
-	// A goal's words name the box and branch; without one, an
+	// A task's words name the box and branch; without one, an
 	// adjective-noun pair does. --box names the box, not the branch.
 	gen, err := newBoxName(ctx, namePrefix, slugText)
 	if err != nil {
@@ -402,7 +440,13 @@ func runRepo(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	newBoxLabels = runLabels(goal != "", repos, branch, claudeIssue)
+	kind := ""
+	if goal != "" {
+		if kind, err = unattendedRunKind(); err != nil {
+			return err
+		}
+	}
+	newBoxLabels = runLabels(kind, repos, branch, claudeIssue)
 	if claudePR != 0 {
 		newBoxLabels["boxctl.pr"] = strconv.Itoa(claudePR)
 	}
@@ -423,9 +467,9 @@ func runRepo(cmd *cobra.Command, args []string) error {
 	if !created {
 		relabelModel(ctx, name)
 	}
-	sess := taskSession{dir: workDir, name: agent.name}
+	sess := workspace{dir: workDir, session: agent.name}
 	// An attended run's box goes when it ends, once its work is on GitHub
-	// (repoWorkPushed); a goal's stays until the server pauses it. Until
+	// (repoWorkPushed); an unattended run's stays until the server pauses it. Until
 	// Claude is running, though, a box this run made holds nothing of
 	// yours: if setting it up fails (a mistyped --repo, say), it's deleted
 	// rather than left idle -- with no run on it, it never reports the
@@ -488,7 +532,7 @@ func runRepo(cmd *cobra.Command, args []string) error {
 		return startSession(ctx, t, sess, false, args)
 	}
 
-	sess.name = agent.name + "-goal-" + id
+	sess.session = agent.name + "-goal-" + id
 	g := goalRun{dir: workDir, repoDirs: dirs, branch: branch, goalDir: boxGoalsDir + "/" + id, envFile: sess.envFile(), args: args}
 	if err := stageClaudeEnv(ctx, box, sess, env); err != nil {
 		return fmt.Errorf("passing Claude its credentials: %w", err)
@@ -498,7 +542,7 @@ func runRepo(cmd *cobra.Command, args []string) error {
 		prompt = prGoalPrompt(goal, repos[0], claudePR, branch)
 	}
 	if err := box.run(ctx, "umask 077 && mkdir -p "+shellQuote(g.goalDir)+" && cat >"+shellQuote(g.goalDir+"/prompt.txt"), strings.NewReader(prompt)); err != nil {
-		return fmt.Errorf("writing the goal on %s: %w", name, err)
+		return fmt.Errorf("writing the task on %s: %w", name, err)
 	}
 	if err := box.run(ctx, "cat >"+shellQuote(g.goalDir+"/run.sh")+" && ln -sfn "+shellQuote(g.goalDir)+" "+boxGoalsDir+"/latest", strings.NewReader(g.runnerScript())); err != nil {
 		return fmt.Errorf("writing the runner on %s: %w", name, err)
@@ -520,12 +564,12 @@ var claudeStatusWait bool
 
 var claudeStatusCmd = &cobra.Command{
 	Use:   "status <box>",
-	Short: "Show how a --goal run on a box is going, without connecting to it",
-	Long: `Prints the box's row from claude ls: its state, how its goal is going,
+	Short: "Show how a --task run on a box is going, without connecting to it",
+	Long: `Prints the box's row from claude ls: its state, how its task is going,
 when that last changed, its branch and its pull request -- from what the
 box reports to the server, so it works on a paused box too.
 
---wait waits for the goal to finish, then exits 0 if it's done and 1 if
+--wait waits for the task to finish, then exits 0 if it's done and 1 if
 it failed, so a script can wait for a run:
 
   boxctl claude status --wait goal-boxctl-fix-login-a1b2 && echo merged`,
@@ -537,7 +581,7 @@ it failed, so a script can wait for a run:
 }
 
 func init() {
-	claudeStatusCmd.Flags().BoolVar(&claudeStatusWait, "wait", false, "wait for the goal to finish; exit 1 if it failed")
+	claudeStatusCmd.Flags().BoolVar(&claudeStatusWait, "wait", false, "wait for the task to finish; exit 1 if it failed")
 	claudeCmd.AddCommand(claudeStatusCmd)
 }
 
@@ -573,15 +617,15 @@ func goalStatusOf(ctx context.Context, name string, wait bool) error {
 			stop()
 			printRunStatus(vm)
 			if wait && st.Status == "failed" {
-				return fmt.Errorf("%s's goal failed%s", name, goalError(st))
+				return fmt.Errorf("%s's task failed%s", name, goalError(st))
 			}
 			return nil
-		case st == nil && vm.Labels["boxctl.run"] != "goal":
-			return fmt.Errorf("%s isn't running a goal", name)
+		case st == nil && !unattendedBox(vm):
+			return fmt.Errorf("%s isn't running a task", name)
 		case st == nil:
-			return fmt.Errorf("%s reports no goal status (an image from before boxctl-status)\nboxctl claude logs -f %s follows it on the box", name, name)
+			return fmt.Errorf("%s reports no run status (an image from before boxctl-status)\nboxctl claude logs -f %s follows it on the box", name, name)
 		}
-		msg := fmt.Sprintf("Waiting for %s's goal (%s)", name, st.Status)
+		msg := fmt.Sprintf("Waiting for %s's task (%s)", name, st.Status)
 		if sp == nil {
 			sp = startSpinner(msg)
 		} else {
@@ -595,7 +639,7 @@ func goalStatusOf(ctx context.Context, name string, wait bool) error {
 	}
 }
 
-// goalError is ": <error>" for a failed goal that said why, "" otherwise.
+// goalError is ": <error>" for a failed run that said why, "" otherwise.
 func goalError(st *goalStatus) string {
 	if st.Error == "" {
 		return ""
@@ -609,8 +653,8 @@ var claudeLogsFollow, claudeLogsRaw bool
 
 var claudeLogsCmd = &cobra.Command{
 	Use:   "logs <box>",
-	Short: "Show how a --goal run on a box is going",
-	Long: `Prints the status of the box's latest --goal run (running, done or failed,
+	Short: "Show how a --task run on a box is going",
+	Long: `Prints the status of the box's latest --task run (running, done or failed,
 and the pull request's URL), then its log: what Claude said and did, one
 step per line (--raw for Claude's JSON lines).
 -f keeps following it until the run ends.`,
@@ -652,7 +696,7 @@ func goalLogs(ctx context.Context, name string, follow bool) error {
 // stops once the run has ended, with the status it ended with.
 func logsScript(follow bool) string {
 	d := boxGoalsDir + "/latest"
-	s := `[ -d ` + d + ` ] || { echo "no --goal run on this box" >&2; exit 1; }
+	s := `[ -d ` + d + ` ] || { echo "no --task run on this box" >&2; exit 1; }
 cat ` + d + `/status.json 2>/dev/null
 `
 	if !follow {

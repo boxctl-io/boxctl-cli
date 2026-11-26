@@ -381,7 +381,7 @@ function renderDrawer() {
     obj = S.boxes.find((b) => b.name === d.key);
     if (!obj) { $("d-title").textContent = d.key + " (gone)"; $("d-actions").innerHTML = ""; $("d-body").textContent = "This box no longer exists."; el.classList.add("open"); return; }
     describe = (obj.describe || []).join("\n");
-    if (obj.goal_run) tabs.push("logs");
+    if (obj.unattended) tabs.push("logs");
     $("d-actions").innerHTML = boxButtons(obj, false);
   } else {
     obj = S.backups.find((b) => b.id === d.key);
@@ -393,7 +393,7 @@ function renderDrawer() {
   $("d-tabs").innerHTML = tabs.map((t) => `<button data-tab="${t}" class="${d.tab === t ? "on" : ""}">${t === "json" ? "JSON" : t[0].toUpperCase() + t.slice(1)}</button>`).join("");
   let body;
   if (d.tab === "json") {
-    const { describe: _, run: _r, project: _p, branch: _b, pr: _pr, size_label: _s, age: _a, rank: _k, unfinished: _u, goal_run: _g, ...raw } = obj;
+    const { describe: _, run: _r, project: _p, branch: _b, pr: _pr, size_label: _s, age: _a, rank: _k, unfinished: _u, unattended: _g, ...raw } = obj;
     body = JSON.stringify(raw, null, 2);
   } else if (d.tab === "logs") {
     const l = S.logs[d.key];

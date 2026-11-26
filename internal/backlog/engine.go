@@ -51,7 +51,7 @@ type Obs struct {
 type ActionKind string
 
 const (
-	Launch       ActionKind = "launch"        // start a run: boxctl claude --goal on Box
+	Launch       ActionKind = "launch"        // start a run: boxctl claude --task on Box
 	RemoveBox    ActionKind = "remove_box"    // delete Box
 	Rerun        ActionKind = "rerun"         // gh run rerun --failed, each of RunIDs
 	UpdateBranch ActionKind = "update_branch" // bring PR's branch up to date with its base, expecting SHA

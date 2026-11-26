@@ -17,7 +17,7 @@ import (
 // list` shows them. The repository is the current directory's GitHub
 // origin, `:prs owner/name`, or the one `p` picked in `:repos`. enter
 // describes a PR, `g` asks what Claude should do about it and runs
-// `boxctl claude --repo R --pr N --goal "..."` (an unattended run on the
+// `boxctl claude --repo R --pr N --task "..."` (an unattended run on the
 // PR's branch, claudepr.go), `o` opens it in the browser. Like :repos it
 // asks GitHub only when opened and on R, never on the 5s tick.
 
@@ -164,7 +164,7 @@ func describePR(repo string, p ghPR) []string {
 		lines = append(lines, markdownLines(strings.Split(b, "\n"), 60)...)
 	}
 	lines = append(lines, "", "g asks Claude to do something on this PR's branch, unattended on a new box",
-		"(`boxctl claude --repo "+repo+" --pr "+strconv.Itoa(p.Number)+" --goal ...`): a status summary, a fix, a review.")
+		"(`boxctl claude --repo "+repo+" --pr "+strconv.Itoa(p.Number)+" --task ...`): a status summary, a fix, a review.")
 	return lines
 }
 
@@ -180,11 +180,11 @@ func (m tuiModel) askPRGoal(p ghPR, harness string) (tea.Model, tea.Cmd) {
 	repo := m.prsRepo
 	title := fmt.Sprintf("Ask Claude about %s#%d", repo, p.Number) + harnessSuffix(harness)
 	cmd := m.promptText(title, []string{
-		"Claude works on the PR's branch unattended on a new box (boxctl claude --pr --goal);",
+		"Claude works on the PR's branch unattended on a new box (boxctl claude --pr --task);",
 		"anything it changes is pushed to that branch. :boxes' RUN column and l follow it.",
 	}, "e.g. summarize where this stands and what blocks merging", func(m tuiModel, value string) (tea.Model, tea.Cmd) {
 		if value == "" {
-			return m, m.fail("a goal is needed")
+			return m, m.fail("a task description is needed")
 		}
 		return m.claudeRun(fmt.Sprintf("%s#%d", repo, p.Number), claudePRArgs(repo, p.Number, value, harness), true)
 	})

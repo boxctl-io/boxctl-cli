@@ -10,7 +10,7 @@ import (
 )
 
 // An ephemeral run -- boxctl claude without --keep, --box,
-// --detach or --task -- gets a box of its own, created for this run and
+// --detach or --workspace -- gets a box of its own, created for this run and
 // deleted when it ends: the session quits or setup fails.
 // Not when you detach or the connection drops (that's reconnected, and if
 // you give up on it): the box is kept, its session still running (see
@@ -21,7 +21,7 @@ import (
 // ephemeralRun reports whether this run's box is deleted when it ends.
 // Call it after checkSessionFlags, which turns --own-box into --box.
 func ephemeralRun() bool {
-	return !claudeKeep && claudeBox == "" && !claudeDetach && claudeTask == ""
+	return !claudeKeep && claudeBox == "" && !claudeDetach && claudeWorkspace == ""
 }
 
 // ephemeralBoxName is a fresh box name for this project:

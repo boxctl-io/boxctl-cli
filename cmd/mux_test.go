@@ -76,7 +76,7 @@ func readFile(t *testing.T, p string) string {
 func TestHerdrStart(t *testing.T) {
 	log := fakeHerdr(t)
 	marker, runDir := boxPaths(t)
-	s := newTaskSession("/w/my app", "")
+	s := newWorkspace("/w/my app", "")
 	line := `exec claude 'fix "it"'`
 	start := func(detached bool) string {
 		out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, line, detached)).CombinedOutput()
@@ -120,7 +120,7 @@ func TestHerdrStartDetached(t *testing.T) {
 	log := fakeHerdr(t)
 	_, runDir := boxPaths(t)
 	t.Setenv("FAKE_HERDR_SERVER_SECS", "5")
-	s := newTaskSession("/w/app", "auth")
+	s := newWorkspace("/w/app", "auth")
 	s.shellAfter = true
 	// Over ssh, the start returns when its output closes: the server it
 	// leaves running must not hold it (a goal launch hung until the box
@@ -136,7 +136,7 @@ func TestHerdrStartDetached(t *testing.T) {
 	}
 	calls := readFile(t, log)
 	if !strings.Contains(calls, "--label claude-auth --focus\n") || !strings.Contains(calls, "pane run w1:p1 exec sh "+shellQuote(runDir+"/claude-auth.cmd")+"\n") {
-		t.Errorf("task session:\n%s", calls)
+		t.Errorf("worktree session:\n%s", calls)
 	}
 	if strings.Contains(calls, "server stop") || strings.HasSuffix(calls, "\n\n") {
 		t.Errorf("detached start stops the server or attaches:\n%s", calls)
@@ -144,7 +144,7 @@ func TestHerdrStartDetached(t *testing.T) {
 }
 
 func TestHerdrRunningAndList(t *testing.T) {
-	s := newTaskSession("/w/app", "")
+	s := newWorkspace("/w/app", "")
 	if got := (herdrMux{}).running(s); !strings.Contains(got, `'"label":"claude"'`) {
 		t.Error(got)
 	}
@@ -165,7 +165,7 @@ func TestTmuxList(t *testing.T) {
 	if len(got) != 2 || !strings.HasSuffix(got["claude"], " ago") {
 		t.Errorf("parseList: %v", got)
 	}
-	if got := (tmuxMux{}).running(newTaskSession("/w/app", "")); got != "tmux has-session -t =claude 2>/dev/null" {
+	if got := (tmuxMux{}).running(newWorkspace("/w/app", "")); got != "tmux has-session -t =claude 2>/dev/null" {
 		t.Error(got)
 	}
 }
@@ -211,7 +211,7 @@ func TestProjectCheckReportsTheMux(t *testing.T) {
 func TestHerdrStartAfterServerRestart(t *testing.T) {
 	log := fakeHerdr(t)
 	boxPaths(t)
-	s := newTaskSession("/w/app", "")
+	s := newWorkspace("/w/app", "")
 	s.shellAfter = true
 	start := func() string {
 		out, err := exec.Command("sh", "-c", (herdrMux{}).start(s, "claude; exec bash", true)).CombinedOutput()

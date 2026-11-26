@@ -17,10 +17,10 @@ func TestInProject(t *testing.T) {
 		{vm("boxctl-fix-a1b2", map[string]string{"boxctl.run": "session", "boxctl.project": dir}), true},
 		{vm("boxctl-web-fix-a1b2", map[string]string{"boxctl.run": "session", "boxctl.project": "/Users/x/boxctl-web", "boxctl.repo": "cdalar/boxctl-web"}), false},
 		{vm("claude-boxctl-web", map[string]string{"boxctl.run": "box", "boxctl.project": "/Users/x/boxctl-web"}), false}, // claude-boxctl's name plus -web
-		{vm("goal-boxctl-x-a1b2", map[string]string{"boxctl.run": "goal", "boxctl.repo": repo}), true},
-		{vm("goal-onctl-x-a1b2", map[string]string{"boxctl.run": "goal", "boxctl.repo": "cdalar/onctl"}), false},
+		{vm("goal-boxctl-x-a1b2", map[string]string{"boxctl.run": "code", "boxctl.repo": repo}), true},
+		{vm("goal-onctl-x-a1b2", map[string]string{"boxctl.run": "code", "boxctl.repo": "cdalar/onctl"}), false},
 		{vm("workspace-x-a1b2", map[string]string{"boxctl.run": "repo", "boxctl.repo": "o/a," + repo}), true},
-		// Unlabeled: the project's own box and its --own-box tasks, by name.
+		// Unlabeled: the project's own box and its --own-box workspaces, by name.
 		{vm("claude-boxctl", nil), true},
 		{vm("claude-boxctl-fix", nil), true},
 		{vm("boxctl-fix-a1b2", nil), false},

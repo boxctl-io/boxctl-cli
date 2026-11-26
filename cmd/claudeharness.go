@@ -151,11 +151,11 @@ func (h *harness) apply(ctx context.Context, box *boxSSH) error {
 //	--harness none            none
 //	--harness <dir|name[@ref]> that one (resolveHarness)
 //	~/.boxctl/harness/default your default, for every run
-//	--goal / --issue          pr-only, by name: it runs unattended with
+//	--task / --issue          pr-only, by name: it runs unattended with
 //	                          --dangerously-skip-permissions, so it is the run
 //	                          that most needs a guardrail you didn't have to ask for
 //
-// A harness with nothing but a model.json has no rules, so for --goal and
+// A harness with nothing but a model.json has no rules, so for --task and
 // --issue it doesn't stand in for pr-only: its model and pr-only's rules
 // both apply (withRules). Whatever is picked besides an explicit
 // --harness is announced, and so is pr-only under one.
@@ -220,8 +220,8 @@ func useHarness(ctx context.Context, arg string) error {
 	return nil
 }
 
-// unattendedRun: --goal or --issue, which get pr-only by default.
-func unattendedRun() bool { return claudeGoal != "" || claudeIssue != 0 }
+// unattendedRun: --task or --issue, which get pr-only by default.
+func unattendedRun() bool { return claudeTask != "" || claudeIssue != 0 }
 
 // withRules keeps a model-only claudeHarness (named by what) from
 // standing in for an unattended run's rules: pr-only takes its place,

@@ -668,7 +668,7 @@ func (m *tuiModel) pushHelp() {
 	if v == prsView {
 		lines = append(lines, "", "Open PRs",
 			"  The open pull requests of the current directory's GitHub repo, `:prs owner/name`, or the one p picked in :repos.",
-			"  enter describes one; g asks what Claude should do on its branch (`boxctl claude --pr N --goal ...`), unattended;",
+			"  enter describes one; g asks what Claude should do on its branch (`boxctl claude --pr N --task ...`), unattended;",
 			"  o opens it in the browser. Asked of GitHub when opened and with R, never on the tick.")
 	}
 	if v == reposView {
@@ -676,14 +676,14 @@ func (m *tuiModel) pushHelp() {
 			"  The repositories gh's account can reach (gh api user/repos), newest push first;",
 			"  enter runs `boxctl claude --repo owner/name`: a fresh box with the repo cloned on a new branch,",
 			"  Claude attached, and the box deleted when Claude quits once its work is pushed.",
-			"  g asks for a goal and runs `boxctl claude --repo owner/name --goal ...`: Claude works",
+			"  g asks for a task and runs `boxctl claude --repo owner/name --task ...`: Claude works",
 			"  unattended on a new box and opens a pull request; :boxes' RUN column follows it (home is top here).",
 			"  The list is cached (~/.boxctl/repos.json) and asked of GitHub again when an hour old, or with R.")
 	}
 	if v == boxesView {
 		lines = append(lines, "", "Boxes",
-			"  s shell runs `boxctl ssh <box>`; l logs is `boxctl claude logs` (a --goal run's log);",
-			"  ctrl-d asks first, and again for a --goal run that isn't done;",
+			"  s shell runs `boxctl ssh <box>`; l logs is `boxctl claude logs` (a --task run's log);",
+			"  ctrl-d asks first, and again for a --task run that isn't done;",
 			"  e asks for a port and exposes it at a public URL (`boxctl expose`); :urls lists them.")
 	}
 	m.push(page{kind: pageText, title: "help", lines: lines})
@@ -1132,7 +1132,7 @@ func (m tuiModel) ssh(name string) (tea.Model, tea.Cmd) {
 	})
 }
 
-// logs fetches a --goal run's log off the box (what `boxctl claude
+// logs fetches a --task run's log off the box (what `boxctl claude
 // logs` prints: the same script, over Exec instead of ssh, through the
 // same formatter) into a text page.
 func (m tuiModel) logs(name string) (tea.Model, tea.Cmd) {
@@ -1183,7 +1183,7 @@ func (m tuiModel) logs(name string) (tea.Model, tea.Cmd) {
 // there or starts one in the project the box holds -- or an error saying
 // why this box has none to open. A box holding a local project (its
 // boxctl.project label) is opened with --project, so it works from
-// whatever directory the tui runs in; a --repo/--goal box needs none,
+// whatever directory the tui runs in; a --repo/--task box needs none,
 // its clone exists only on the box. A goal run's Claude ran with
 // claude -p, so once that's over, --continue picks its conversation up
 // to ask for changes.
@@ -1205,7 +1205,7 @@ func claudeSessionArgs(vm *client.VM) ([]string, error) {
 	if apiURLFlag != "" {
 		args = append(args, "--api-url", apiURLFlag)
 	}
-	if run == "goal" {
+	if unattendedKind(run) {
 		args = append(args, "--", "--continue")
 	}
 	return args, nil

@@ -18,19 +18,20 @@ import (
 func (a *boxAgent) lsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "ls",
-		Short: a.fill("List this project's {Agent} tasks and boxes, and every goal run"),
-		Long: a.fill(`Lists the tasks on the project's box -- the main checkout and each --task
-worktree, with its branch, whether {Agent} is running there, and when it
-last showed activity (in herdr: what it's doing -- working, blocked, idle)
--- then, as boxctl ls -p -a lists them, the
-project's boxes (its own, --own-box tasks', ephemeral and --repo runs')
-and every --goal/--issue run whatever its project, with how the goal is
-going and its pull request. Only the project's box is connected to, for
-its tasks; the rest is from what the boxes report to the server, so a
-paused box shows its real status too. Boxes are found by the labels
-boxctl gives them; boxctl label adds them to a box from before labels.
-The server pauses a box whose goal has finished and that nothing has
-used for 10 minutes.`),
+		Short: a.fill("List this project's {Agent} workspaces and their runs, and every unattended run"),
+		Long: a.fill(`Lists the workspaces on the project's box -- the main checkout and each
+--workspace worktree, with its branch, whether {Agent} is running there
+(its interactive run), and when it last showed activity (in herdr: what
+it's doing -- working, blocked, idle) -- then the runs, as boxctl ls -p -a
+lists their boxes: the project's (its own box, --own-box workspaces',
+ephemeral and --repo runs') and every --task/--issue run whatever its
+project, with its kind, how it's going and its pull request. Only the
+project's box is connected to, for its workspaces; the rest is from what
+the boxes report to the server, so a paused box shows its real status
+too. Boxes are found by the labels boxctl gives them; boxctl label adds
+them to a box from before labels. The server pauses a box whose task has
+finished and that nothing has used for 10 minutes. boxctl runs lists
+every run, the backlog's too.`),
 		Args: cobra.NoArgs,
 		RunE: a.runs(func(cmd *cobra.Command, _ []string) error {
 			return claudeList(cmd.Context())
@@ -56,10 +57,10 @@ func claudeList(ctx context.Context) error {
 		return err
 	}
 
-	// The tasks on the project's box: only it, and only running, is
+	// The workspaces on the project's box: only it, and only running, is
 	// connected to.
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintf(tw, "TASK\tBRANCH\t%s\tACTIVE\tBOX\n", strings.ToUpper(agent.name))
+	_, _ = fmt.Fprintf(tw, "WORKSPACE\tBRANCH\t%s\tACTIVE\tBOX\n", strings.ToUpper(agent.name))
 	rows := 0
 	if i := slices.IndexFunc(vms, func(vm client.VM) bool { return vm.Name == main }); i >= 0 && vms[i].State == "running" {
 		if rows, err = listBoxSessions(ctx, tw, dir); err != nil {
@@ -72,18 +73,18 @@ func claudeList(ctx context.Context) error {
 		}
 	}
 
-	// Then the boxes, as boxctl ls -p -a lists them, plus every goal
-	// run's: a goal needs no checkout to start from, so it's listed
-	// wherever ls runs.
+	// Then the runs' boxes, as boxctl ls -p -a lists them, plus every
+	// unattended run's: a task needs no checkout to start from, so it's
+	// listed wherever ls runs.
 	repo := githubRepo(dir)
 	vms = slices.DeleteFunc(vms, func(vm client.VM) bool {
 		if a := vm.Labels["boxctl.agent"]; a != "" && a != agent.name {
 			return true
 		}
-		return !inProject(vm, dir, repo) && vm.Labels["boxctl.run"] != "goal"
+		return !inProject(vm, dir, repo) && !unattendedBox(vm)
 	})
 	if len(vms) == 0 {
-		fmt.Fprintf(os.Stderr, "No %s sessions for %s -- start one with boxctl %s.\n", agent.title, dir, agent.name)
+		fmt.Fprintf(os.Stderr, "No %s runs for %s -- start one with boxctl %s.\n", agent.title, dir, agent.name)
 		return nil
 	}
 	if rows > 0 {
@@ -95,21 +96,21 @@ func claudeList(ctx context.Context) error {
 // printRunStatus is claude status's report on one run box, from its
 // labels and run_status.
 func printRunStatus(vm client.VM) {
-	goal, updated, branch, pr := runRow(vm)
+	status, updated, branch, pr := runRow(vm)
 	if updated != "-" {
-		goal += " (" + updated + ")"
+		status += " (" + updated + ")"
 	}
-	fmt.Printf("Box:     %s (%s)\nRun:     %s\nGoal:    %s\nModel:   %s\nBranch:  %s\nPR:      %s\n", vm.Name, vm.State, runText(vm), goal, modelText(vm), branch, pr)
+	fmt.Printf("Box:     %s (%s)\nRun:     %s\nStatus:  %s\nModel:   %s\nBranch:  %s\nPR:      %s\n", vm.Name, vm.State, runText(vm), status, modelText(vm), branch, pr)
 	if st, _ := parseGoalStatus(vm.RunStatus); st != nil && st.Error != "" {
 		fmt.Printf("Error:   %s\n", st.Error)
 	}
 }
 
-// runRow is a run box's goal, when it last changed, branch and pull request:
-// "-" where there's nothing to show, GOAL "?" for a goal box whose status
-// can't be told from its run_status.
-func runRow(vm client.VM) (goal, updated, branch, pr string) {
-	goal, updated, branch, pr = "-", "-", "-", "-"
+// runRow is a run box's status, when it last changed, branch and pull
+// request: "-" where there's nothing to show, status "?" for an unattended
+// run's box whose status can't be told from its run_status.
+func runRow(vm client.VM) (status, updated, branch, pr string) {
+	status, updated, branch, pr = "-", "-", "-", "-"
 	if b := vm.Labels["boxctl.branch"]; b != "" {
 		branch = b
 	}
@@ -119,13 +120,13 @@ func runRow(vm client.VM) (goal, updated, branch, pr string) {
 		fmt.Fprintf(os.Stderr, "warning: %s: %v\n", vm.Name, err)
 		return "?", updated, branch, pr
 	case st == nil:
-		if vm.Labels["boxctl.run"] == "goal" {
-			goal = "?"
+		if unattendedBox(vm) {
+			status = "?"
 		}
-		return goal, updated, branch, pr
+		return status, updated, branch, pr
 	}
 	if st.Status != "" {
-		goal = st.Status
+		status = st.Status
 	}
 	if t, err := time.Parse(time.RFC3339, st.Updated); err == nil {
 		updated = ago(t)
@@ -140,7 +141,7 @@ func runRow(vm client.VM) (goal, updated, branch, pr string) {
 	if n := len(st.PRURLs); n > 1 {
 		pr += fmt.Sprintf(" (+%d more)", n-1)
 	}
-	return goal, updated, branch, pr
+	return status, updated, branch, pr
 }
 
 // listBoxSessions writes a row per worktree on the project's (running)
@@ -162,22 +163,22 @@ func listBoxSessions(ctx context.Context, tw *tabwriter.Writer, dir string) (int
 	branches := worktreeBranches(porcelain)
 	activity := mux.parseList(sessions)
 	worktrees := parseWorktrees(porcelain, dir)
-	sort.SliceStable(worktrees, func(i, j int) bool { return worktrees[i].task < worktrees[j].task })
+	sort.SliceStable(worktrees, func(i, j int) bool { return worktrees[i].name < worktrees[j].name })
 	for _, w := range worktrees {
-		s := newTaskSession(dir, w.task)
-		task := w.task
-		if task == "" {
-			task = "(main)"
+		s := newWorkspace(dir, w.name)
+		name := w.name
+		if name == "" {
+			name = "(main)"
 		}
 		state, active := "stopped", "-"
-		if a, ok := activity[s.name]; ok {
+		if a, ok := activity[s.session]; ok {
 			state, active = "running", a
 		}
 		branch := branches[w.dir]
 		if branch == "" {
 			branch = "-"
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", task, branch, state, active, t.name)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", name, branch, state, active, t.name)
 	}
 	return len(worktrees), nil
 }

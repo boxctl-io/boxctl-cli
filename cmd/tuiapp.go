@@ -7,7 +7,7 @@ import "strings"
 //
 //   - boxesApp: the boxes and what goes with them -- public URLs, images,
 //     sizes, backups. `boxctl tui` starts on it.
-//   - boardApp: the agent work -- the backlog of goals, the runs working
+//   - boardApp: the agent work -- the backlog of tasks, the runs working
 //     on them, the GitHub repositories to start from. `boxctl board`
 //     starts on it.
 //
@@ -60,11 +60,11 @@ var boxesApp = &tuiApp{
 var boardApp = &tuiApp{
 	name:  "board",
 	label: "Board",
-	blurb: "The agent work: goals, their runs, your repos",
+	blurb: "The agent work: tasks, their runs, your repos",
 	views: []*tableView{backlogView, runsView, reposView, prsView, harnessesView},
 	tiles: []homeTile{
-		{backlogView, "Goals waiting for a run, and PRs", "goal"},
-		{runsView, "Every attempt at a goal", "run"},
+		{backlogView, "Tasks waiting for a run, and PRs", "task"},
+		{runsView, "Every run of a backlog task", "run"},
 		{reposView, "GitHub repos to start Claude on", "repo"},
 		{prsView, "Open PRs of a repo: ask Claude about one", "pr"},
 		{harnessesView, "Rules for Claude on a box, from claude --harness", "harness"},

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// boxctl claude --repo owner/name --pr N [--goal "..."]: a run on the
+// boxctl claude --repo owner/name --pr N [--task "..."]: a run on the
 // branch of an open pull request instead of a new one -- a follow-up:
 // fix its CI, resolve a conflict with the default branch, address a
 // review. The box clones that branch (and fetches the others, so

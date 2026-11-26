@@ -8,7 +8,7 @@ import (
 )
 
 func TestFilterUnfinished(t *testing.T) {
-	goal := map[string]string{"boxctl.run": "goal"}
+	goal := map[string]string{"boxctl.run": "code"}
 	vms := []client.VM{
 		{Name: "done", Labels: goal, RunStatus: []byte(`{"status":"done"}`)},
 		{Name: "running", Labels: goal, RunStatus: []byte(`{"status":"running"}`)},

@@ -247,10 +247,10 @@ func printBoxes(ctx context.Context, vms []client.VM, format string, all bool, n
 }
 
 // runText is ls's RUN column: what made the box and what for, from its
-// labels alone (sessionLabels, runLabels) -- "claude goal", "claude
+// labels alone (sessionLabels, runLabels) -- "claude code", "claude
 // session" -- and, for a run that reports one, how it's going from its
-// run_status ("claude goal: done"). A goal box without a run_status (an
-// image older than boxctl-status) gets "?": ls never reaches into a box
+// run_status ("claude code: done"). An unattended run's box without a
+// run_status (an image older than boxctl-status) gets "?": ls never reaches into a box
 // to find out. "-" for a box nothing labeled.
 func runText(vm client.VM) string {
 	run := vm.Labels["boxctl.run"]
@@ -266,7 +266,7 @@ func runText(vm client.VM) string {
 		return text + ": ?"
 	case st != nil && st.Status != "":
 		return text + ": " + st.Status
-	case run == "goal":
+	case unattendedKind(run):
 		return text + ": ?"
 	}
 	return text
@@ -335,7 +335,7 @@ func age(t time.Time) string {
 func init() {
 	addOutputFlag(lsCmd, "wide")
 	lsCmd.Flags().BoolP("all", "a", false, "also list paused and stopped boxes")
-	lsCmd.Flags().BoolP("project", "p", false, "only this directory's project's boxes: its own, its runs' and its goals'")
+	lsCmd.Flags().BoolP("project", "p", false, "only this directory's project's boxes: its own and its runs'")
 	lsCmd.Flags().StringArrayP("label", "l", nil, "only boxes with this label, key or key=value (repeatable, all must match)")
 	rootCmd.AddCommand(lsCmd)
 }

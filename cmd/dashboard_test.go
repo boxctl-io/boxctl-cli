@@ -99,7 +99,7 @@ func TestDashboardGate(t *testing.T) {
 		t.Errorf("boxes = %q, want %q (ls's order)", got, want)
 	}
 	for _, b := range boxes {
-		if b.Name == "goal-box" && (!b.Unfinished || !b.GoalRun || b.Run != "claude goal: running") {
+		if b.Name == "goal-box" && (!b.Unfinished || !b.Unattended || b.Run != "claude code: running") {
 			t.Errorf("goal-box = %+v, want an unfinished goal run", b)
 		}
 	}

@@ -54,7 +54,9 @@ func TestParsePR(t *testing.T) {
 
 func TestBacklogLaunchArgs(t *testing.T) {
 	got := strings.Join(backlogLaunchArgs(backlog.Action{Repo: "o/r", Box: "q1-ci-2", Item: 1, Run: backlog.CIFix, PR: 7, Goal: "fix", Model: "opus", Harness: "visual"}), " ")
-	if got != "claude --repo o/r --box q1-ci-2 --backlog-item 1 --goal fix --pr 7 --model opus --harness visual" {
+	// A one-word task: the backlog's runs skip --task's word count
+	// (runRepo), which is there for a description typed by hand.
+	if got != "claude --repo o/r --box q1-ci-2 --backlog-item 1 --run-kind ci_fix --task fix --pr 7 --model opus --harness visual" {
 		t.Errorf("follow-up: %s", got)
 	}
 	if got := strings.Join(backlogLaunchArgs(backlog.Action{Repo: "o/r", Box: "q1-code-1", Item: 1, Run: backlog.Code, Goal: "g"}), " "); strings.Contains(got, "--pr") {
@@ -123,7 +125,7 @@ func TestBacklogPass(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.wg.Wait()
-	if len(launched) != 1 || !strings.Contains(launched[0], "--box q1-code-1 --backlog-item 1 --goal fix the bug") {
+	if len(launched) != 1 || !strings.Contains(launched[0], "--box q1-code-1 --backlog-item 1 --run-kind code --task fix the bug") {
 		t.Fatalf("launched = %v", launched)
 	}
 	q, _ := loadBacklog()
@@ -257,7 +259,7 @@ func TestTUIBacklog(t *testing.T) {
 	m, _ = press(t, m, "a")
 	m = typeIn(t, m, "o/r")
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.title != "Harness for the goal on o/r" {
+	if m.dialog == nil || m.dialog.title != "Harness for the task on o/r" {
 		t.Fatalf("harness prompt: %+v", m.dialog)
 	}
 	m.harnesses = []string{"mine", "pr-only", "visual"}
@@ -266,7 +268,7 @@ func TestTUIBacklog(t *testing.T) {
 	}
 	m = typeIn(t, m, "vis")
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.title != "Add a goal on o/r (harness visual)" {
+	if m.dialog == nil || m.dialog.title != "Add a task on o/r (harness visual)" {
 		t.Fatalf("goal prompt: %+v", m.dialog)
 	}
 	m = typeIn(t, m, "do the thing")
@@ -489,12 +491,12 @@ func TestTUIBacklogRepoChoices(t *testing.T) {
 	m, _ = press(t, m, "up")
 	m, _ = press(t, m, "up")
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.title != "Harness for the goal on acme/web" {
+	if m.dialog == nil || m.dialog.title != "Harness for the task on acme/web" {
 		t.Fatalf("harness prompt: %+v", m.dialog)
 	}
 	// Enter alone keeps the default, which the item then doesn't name.
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.title != "Add a goal on acme/web" {
+	if m.dialog == nil || m.dialog.title != "Add a task on acme/web" {
 		t.Fatalf("goal prompt: %+v", m.dialog)
 	}
 	// A typed owner/name nobody listed is taken as typed.
@@ -505,7 +507,7 @@ func TestTUIBacklogRepoChoices(t *testing.T) {
 	// A typed name@ref is taken as typed too.
 	m = typeIn(t, m, "pr-only@v2")
 	m, _ = press(t, m, "enter")
-	if m.dialog == nil || m.dialog.title != "Add a goal on acme/boxctl (harness pr-only@v2)" {
+	if m.dialog == nil || m.dialog.title != "Add a task on acme/boxctl (harness pr-only@v2)" {
 		t.Fatalf("typed: %+v", m.dialog)
 	}
 }

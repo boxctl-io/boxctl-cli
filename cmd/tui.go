@@ -35,7 +35,7 @@ var tuiCmd = &cobra.Command{
 	Short: "Browse and manage your boxes in a k9s-style terminal UI",
 	Long: `Opens a live, full-screen view of your boxes, laid out like k9s.
 It's one side of two: the other, the board, is the agent work -- the
-backlog of goals, their runs, the repositories to start from. ctrl-t
+backlog of tasks, their runs, the repositories to start from. ctrl-t
 switches between them from anywhere, each kept where you left it; bare
 boxctl starts on the split above both, and boxctl board on the board.
 
@@ -49,7 +49,7 @@ esc from a view comes back to it, and esc there goes up to the split
   ctrl-t       switch to the board (also :backlog, :runs, :repos, :prs)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
-  enter, d     describe the box; y its JSON; l a --goal run's log
+  enter, d     describe the box; y its JSON; l a --task run's log
   s            open a terminal on the box (boxctl ssh)
   a            open the box's Claude session (boxctl claude --box)
   c            create a box (name, image and size are asked)
@@ -67,8 +67,8 @@ esc from a view comes back to it, and esc there goes up to the split
 
 var boardCmd = &cobra.Command{
 	Use:   "board",
-	Short: "The backlog of goals, their runs and your repos, in a terminal UI",
-	Long: `Opens the tui on the board: the agent work -- the backlog of goals
+	Short: "The backlog of tasks, their runs and your repos, in a terminal UI",
+	Long: `Opens the tui on the board: the agent work -- the backlog of tasks
 (boxctl backlog), every run working on them (boxctl runs), and the GitHub
 repositories to start Claude on. The other side, the boxes, is ctrl-t
 away (boxctl tui starts there).
@@ -88,7 +88,7 @@ above both sides (:home from anywhere).
   ctrl-t       switch to the boxes (also :boxes, :urls, ...)
   /text        filter the rows; esc clears
   j/k, arrows  move; g/G top/bottom; shift+letter sorts by that column
-  :backlog     a adds a goal (the repository picked from a list: type to
+  :backlog     a adds a task (the repository picked from a list: type to
                narrow, up/down to select, tab to complete); m merges a ready
                PR, r retries, ctrl-d cancels, o opens the PR, enter shows
                the item's runs; L sets how many run at once
@@ -97,7 +97,7 @@ above both sides (:home from anywhere).
                run that's going (its box deleted, its item left to you until r)
   :repos       your GitHub repos, newest push first (from gh): enter starts
                Claude on a fresh box with the repo cloned (boxctl claude
-               --repo), g runs a goal there unattended (--goal), a adds one
+               --repo), g runs a task there unattended (--task), a adds one
                to the backlog
   esc          back; q (on home), ctrl-c or :q quits`,
 	Args: cobra.NoArgs,
@@ -192,10 +192,10 @@ type (
 	tuiClaudeDoneMsg struct { // `boxctl claude --repo` from :repos, or a box's session (a), ended
 		repo   string
 		box    string // a's: the box whose session it was
-		goal   bool   // a --goal run: it started Claude and returned
+		goal   bool   // a --task run: it started Claude and returned
 		err    error
 		stderr string
-		stdout string // a goal run's, with the box it started
+		stdout string // a task run's, with the box it started
 	}
 	tuiCreatedMsg struct {
 		vm  *client.VM
@@ -246,7 +246,7 @@ type tuiDialog struct {
 	title  string
 	body   []string
 	input  *textinput.Model // a one-line prompt; nil for a question
-	area   *textarea.Model  // a wrapping prompt (a goal); nil otherwise
+	area   *textarea.Model  // a wrapping prompt (a task); nil otherwise
 	yes    func(m tuiModel) (tea.Model, tea.Cmd)
 	submit func(m tuiModel, value string) (tea.Model, tea.Cmd)
 	// choices, when set, is what a prompt offers under its input (read at
@@ -615,9 +615,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.goal {
 			if box := goalBoxName(msg.stdout); box != "" {
-				return m, tea.Batch(m.say("goal on %s started on %s (l in :boxes for its log)", msg.repo, box), m.refresh())
+				return m, tea.Batch(m.say("task on %s started on %s (l in :boxes for its log)", msg.repo, box), m.refresh())
 			}
-			return m, tea.Batch(m.say("goal on %s started", msg.repo), m.refresh())
+			return m, tea.Batch(m.say("task on %s started", msg.repo), m.refresh())
 		}
 		return m, tea.Batch(m.say("claude on %s ended", msg.repo), m.refresh())
 

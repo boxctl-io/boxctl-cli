@@ -17,7 +17,7 @@ import (
 // inProject reports whether vm is dir's project's: labeled with dir as
 // its project or repo (dir's GitHub repository) among its repositories,
 // or, unlabeled, named as an agent's box for dir is (claude-<dir>, and
-// claude-<dir>-<task> for an --own-box task). An unlabeled run box isn't
+// claude-<dir>-<name> for an --own-box workspace). An unlabeled run box isn't
 // found: by name a boxctl-web box looks like boxctl's.
 func inProject(vm client.VM, dir, repo string) bool {
 	if vm.Labels["boxctl.run"] != "" {

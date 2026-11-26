@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// How a --goal run went, as the box's runner records it
+// How a --task run went, as the box's runner records it
 // (<goalDir>/status.json, written by goalRun.runnerScript), which the
 // box also reports to the server over vsock (boxctl-status): `claude ls`
 // and `boxctl ls` read that, a box's run_status, and never the file.
@@ -34,12 +34,12 @@ func parseGoalStatus(out []byte) (*goalStatus, error) {
 	}
 	var s goalStatus
 	if err := json.Unmarshal(out, &s); err != nil {
-		return nil, fmt.Errorf("reading the goal's status: %w", err)
+		return nil, fmt.Errorf("reading the run's status: %w", err)
 	}
 	return &s, nil
 }
 
-// goalBoxPrefix starts a --goal (or --issue) run's generated box name:
+// goalBoxPrefix starts a --task (or --issue) run's generated box name:
 // goal-<repository>-<slug>-<id>. box() cuts the repository short before
 // it, never this.
 const goalBoxPrefix = "goal-"
